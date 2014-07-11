@@ -1,0 +1,40 @@
+.wrapper {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+}
+
+.triangle {
+    width: 0;
+    height: 0;
+    border: 50px solid;
+    position: absolute;
+    left: -50px;
+    top: -50px;
+}
+
+@media (min-width: 400px) {
+    .changeable {
+        border-color: purple #fff #fff #fff;
+    }
+}
+@media (min-width: 600px) {
+    .changeable {
+        border-color: #fff purple #fff #fff;
+    }
+}
+@media (min-width: 800px) {
+    .changeable {
+        border-color: #fff #fff purple #fff;
+    }
+}
+@media (min-width: 1000px) {
+    .changeable {
+        border-color: #fff #fff #fff purple;
+    }
+}
+@media (min-width: 1200px) {
+    .changeable {
+        border-color: purple;
+    }
+}
