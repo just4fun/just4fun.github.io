@@ -1,0 +1,108 @@
+/* global */
+body,
+p {
+    margin: 0;
+}
+
+body {
+    color: #fff;
+    background-color: #a3248f;
+    font-size: 40px;
+    font-family: fantasy;
+    text-align: center;
+}
+
+.tl {
+    text-align: left;
+}
+.tc {
+    text-align: center;
+}
+.tr {
+    text-align: right;
+}
+
+.mr40 {
+    margin-left: 40px;
+}
+
+/* custom */
+.my-head {
+    width: 100px;
+    border: 3px solid #fff;
+    border-radius: 50%;
+    /* rotate */
+    -webkit-transition: -webkit-transform 1s ease-out;
+    -moz-transition: -moz-transform 1s ease-out;
+    transition: transform 1s ease-out;
+    /* zoom */
+    -webkit-transition: 1s;
+    -moz-transition: 1s;
+    transition: 1s;
+}
+.my-head:hover {
+    width: 200px;
+    /* rotate */
+    -webkit-transform: rotateZ(360deg);
+    -moz-transform: rotateZ(360deg);
+    transform: rotateZ(360deg);
+}
+
+.my-body {
+    padding: 0;
+    list-style: none;
+    font-size: 20px;
+}
+.my-body li {
+    /* zoom */
+    -webkit-transition: 1s;
+    -moz-transition: 1s;
+    transition: 1s;
+}
+.my-body li:hover {
+    font-size: 40px;
+}
+
+/* responsive */
+@media (max-width: 1140px) {
+    body {
+        font-size: 35px;
+    }
+}
+@media (max-width: 1040px) {
+    body {
+        font-size: 30px;
+    }
+}
+@media (max-width: 880px) {
+    body {
+        font-size: 25px;
+    }
+}
+@media (max-width: 740px) {
+    body {
+        font-size: 20px;
+    }
+}
+@media (max-width: 600px) {
+    body {
+        font-size: 16px;
+    }
+}
+@media (max-width: 480px) {
+    body {
+        font-size: 12px;
+    }
+    .my-head {
+        width: 50px;
+    }
+    .my-head:hover {
+        width: 100px;
+    }
+    .my-body li {
+        font-size: 12px;
+    }
+    .my-body li:hover {
+        font-size: 16px;
+    }
+}
