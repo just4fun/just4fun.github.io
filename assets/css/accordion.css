@@ -4,7 +4,12 @@ body {
 }
 body {
     margin: 0;
+    color: #fff;
     background-color: #a6ce3a;
+    font-family: "Georgia";
+}
+p {
+    margin: 0;
 }
 
 .accordion {
@@ -29,4 +34,25 @@ body {
 .accordion li:hover {
     width: 300px;
     opacity: 1;
+}
+.back-home {
+    position: absolute;
+    left: 5px;
+    top: 5px;
+}
+
+@media (max-width: 750px) {
+    .accordion {
+        display: none;
+    }
+}
+
+.bold {
+    font-weight: bold;
+}
+.fr {
+    float: right;
+}
+.tc {
+    text-align: center;
 }

@@ -7,7 +7,7 @@ p {
 body {
     color: #fff;
     background-color: #a3248f;
-    font-size: 40px;
+    font-size: 26px;
     font-family: fantasy;
     text-align: center;
 }
@@ -22,8 +22,11 @@ body {
     text-align: right;
 }
 
-.mr40 {
+.ml40 {
     margin-left: 40px;
+}
+.ml80 {
+    margin-left: 80px;
 }
 
 /* custom */
@@ -48,45 +51,36 @@ body {
     transform: rotateZ(360deg);
 }
 
-.my-body {
-    padding: 0;
-    list-style: none;
-    font-size: 20px;
-}
-.my-body li {
-    /* zoom */
-    -webkit-transition: 1s;
-    -moz-transition: 1s;
-    transition: 1s;
-}
-.my-body li:hover {
-    font-size: 40px;
-}
-
 /* responsive */
 @media (max-width: 1140px) {
     body {
-        font-size: 35px;
+        font-size: 24px;
     }
 }
 @media (max-width: 1040px) {
     body {
-        font-size: 30px;
+        font-size: 22px;
     }
 }
 @media (max-width: 880px) {
     body {
-        font-size: 25px;
+        font-size: 20px;
     }
 }
 @media (max-width: 740px) {
     body {
-        font-size: 20px;
+        font-size: 16px;
     }
 }
 @media (max-width: 600px) {
     body {
-        font-size: 16px;
+        font-size: 14px;
+    }
+    .ml40 {
+        margin-left: 20px;
+    }
+    .ml80 {
+        margin-left: 40px;
     }
 }
 @media (max-width: 480px) {
@@ -98,11 +92,5 @@ body {
     }
     .my-head:hover {
         width: 100px;
-    }
-    .my-body li {
-        font-size: 12px;
-    }
-    .my-body li:hover {
-        font-size: 16px;
     }
 }
