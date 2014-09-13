@@ -1,0 +1,32 @@
+html,
+body {
+    height: 100%;
+}
+body {
+    margin: 0;
+    background-color: #a6ce3a;
+}
+
+.accordion {
+    list-style: none;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+}
+.accordion li {
+    background-size: cover;
+    background-repeat: no-repeat;
+    border-left: 1px solid #fff;
+    border-right: 1px solid #fff;
+    height: 100%;
+    width: 100px;
+    -webkit-transition: 0.2s;
+    -moz-transition: 0.2s;
+    transition: 0.2s;
+    opacity: .8;
+    float: right;
+}
+.accordion li:hover {
+    width: 300px;
+    opacity: 1;
+}
