@@ -1,3 +1,4 @@
-#directories to ignore
+#files or directories to ignore
 
+.DS_Store
 .idea/
