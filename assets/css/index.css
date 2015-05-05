@@ -1,96 +1,96 @@
 /* global */
 body,
 p {
-    margin: 0;
+  margin: 0;
 }
 
 body {
-    color: #fff;
-    background-color: #93adc6;
-    font-size: 26px;
-    font-family: fantasy;
-    text-align: center;
+  color: #fff;
+  background-color: #93adc6;
+  font-size: 26px;
+  font-family: fantasy;
+  text-align: center;
 }
 
 .tl {
-    text-align: left;
+  text-align: left;
 }
 .tc {
-    text-align: center;
+  text-align: center;
 }
 .tr {
-    text-align: right;
+  text-align: right;
 }
 
 .ml40 {
-    margin-left: 40px;
+  margin-left: 40px;
 }
 .ml80 {
-    margin-left: 80px;
+  margin-left: 80px;
 }
 
 /* custom */
 .my-head {
-    width: 100px;
-    border: 3px solid #fff;
-    border-radius: 50%;
-    /* rotate */
-    -webkit-transition: -webkit-transform 1s ease-out;
-    -moz-transition: -moz-transform 1s ease-out;
-    transition: transform 1s ease-out;
-    /* zoom */
-    -webkit-transition: 1s;
-    -moz-transition: 1s;
-    transition: 1s;
+  width: 100px;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  /* rotate */
+  -webkit-transition: -webkit-transform 1s ease-out;
+  -moz-transition: -moz-transform 1s ease-out;
+  transition: transform 1s ease-out;
+  /* zoom */
+  -webkit-transition: 1s;
+  -moz-transition: 1s;
+  transition: 1s;
 }
 .my-head:hover {
-    width: 200px;
-    /* rotate */
-    -webkit-transform: rotateZ(360deg);
-    -moz-transform: rotateZ(360deg);
-    transform: rotateZ(360deg);
+  width: 200px;
+  /* rotate */
+  -webkit-transform: rotateZ(360deg);
+  -moz-transform: rotateZ(360deg);
+  transform: rotateZ(360deg);
 }
 
 /* responsive */
 @media (max-width: 1140px) {
-    body {
-        font-size: 24px;
-    }
+  body {
+    font-size: 24px;
+  }
 }
 @media (max-width: 1040px) {
-    body {
-        font-size: 22px;
-    }
+  body {
+    font-size: 22px;
+  }
 }
 @media (max-width: 880px) {
-    body {
-        font-size: 20px;
-    }
+  body {
+    font-size: 20px;
+  }
 }
 @media (max-width: 740px) {
-    body {
-        font-size: 16px;
-    }
+  body {
+    font-size: 16px;
+  }
 }
 @media (max-width: 600px) {
-    body {
-        font-size: 14px;
-    }
-    .ml40 {
-        margin-left: 20px;
-    }
-    .ml80 {
-        margin-left: 40px;
-    }
+  body {
+    font-size: 14px;
+  }
+  .ml40 {
+    margin-left: 20px;
+  }
+  .ml80 {
+    margin-left: 40px;
+  }
 }
 @media (max-width: 480px) {
-    body {
-        font-size: 12px;
-    }
-    .my-head {
-        width: 50px;
-    }
-    .my-head:hover {
-        width: 100px;
-    }
+  body {
+    font-size: 12px;
+  }
+  .my-head {
+    width: 50px;
+  }
+  .my-head:hover {
+    width: 100px;
+  }
 }
