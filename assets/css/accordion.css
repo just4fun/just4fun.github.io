@@ -12,6 +12,17 @@ p {
   margin: 0;
 }
 
+.main-section {
+  height: 100%;
+}
+.main-section--center {
+  height: 100%;
+  margin: 0 auto;
+}
+.main-section__text {
+  font-weight: bold;
+  font-size: 36px;
+}
 .accordion {
   list-style: none;
   height: 100%;
@@ -34,6 +45,15 @@ p {
 .accordion li:hover {
   width: 300px;
   opacity: 1;
+}
+.accordion-pic1 {
+  background-image: url(../../assets/img/sharaku.jpg);
+}
+.accordion-pic2 {
+  background-image: url(../../assets/img/zhiyuan.jpg);
+}
+.accordion-pic3 {
+  background-image: url(../../assets/img/me.jpg);
 }
 .back-home {
   position: absolute;
