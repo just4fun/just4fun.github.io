@@ -41,7 +41,15 @@
           </p>
           <div class='ml40'>
             <p>
-              &lt;age&gt;<script>document.write(new Date().getFullYear() - 1988)</script>&lt;/age&gt;
+              &lt;age&gt;<script>
+                function calculateAge(birthdayDate) {
+                  var ageDifMs = Date.now() - birthdayDate.getTime();
+                  var ageDate = new Date(ageDifMs);
+                  return Math.abs(ageDate.getUTCFullYear() - 1970);
+                }
+
+                document.write(calculateAge(new Date('1988-01-25')));
+              </script>&lt;/age&gt;
             </p>
             <p>
               &lt;height&gt;182&lt;/height&gt;
