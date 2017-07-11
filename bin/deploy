@@ -25,4 +25,4 @@ git config user.email "ci@just4.fun"
 
 git add --all
 git commit -a -m "Travis #$TRAVIS_BUILD_NUMBER"
-git push --force origin master
+git push --force https://${CI_TOKEN}@github.com/just4fun/just4fun.github.io.git master
