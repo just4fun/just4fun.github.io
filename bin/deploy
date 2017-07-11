@@ -26,5 +26,5 @@ git config user.name "just4fun.ci"
 git config user.email "ci@just4.fun"
 
 git add --all
-git commit -a -m "Site updated via Travis on `date +"%Y%m%d"`"
+git commit -a -m "Site updated via Travis on `date +"%Y-%m-%d %H:%M:%S"`"
 git push --force https://${CI_TOKEN}@github.com/just4fun/just4fun.github.io.git master
