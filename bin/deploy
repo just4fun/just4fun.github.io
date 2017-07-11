@@ -16,7 +16,9 @@ bundle exec jekyll build
 
 cd ..
 git init $DEPLOY_PATH
+
 cp -r $SRC_PATH/_site/. $DEPLOY_PATH/
+cp $SRC_PATH/README.md $DEPLOY_PATH/
 
 cd $DEPLOY_PATH
 
