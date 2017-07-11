@@ -8,6 +8,10 @@ branches:
   only:
   - src
 
+# set execution permission on our deploy script
+before_script:
+ - chmod +x ./bin/deploy
+
 script: ./bin/deploy
 
 exclude: [vendor]
