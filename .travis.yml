@@ -1,0 +1,10 @@
+language: ruby
+sudo: false
+
+branches:
+  only:
+  - src
+
+script: ./bin/deploy
+
+exclude: [vendor]

@@ -1,0 +1,29 @@
+#!/bin/bash
+
+# enable error reporting to the console
+set -e
+
+SRC_PATH = "src"
+DEPLOY_PATH = "deploy"
+
+rm -rf SRC_PATH
+rm -rf DEPLOY_PATH
+
+git clone https://${CI_TOKEN}@github.com/just4fun/just4fun.github.io.git --branch src SRC_PATH
+cd SRC_PATH
+
+bundle exec jekyll build
+bundle exec htmlproof ./_site
+
+cd ..
+git init DEPLOY_PATH
+cp -R SRC_PATH/_site DEPLOY_PATH
+
+cd DEPLOY_PATH
+
+git config user.name "just4fun.ci"
+git config user.email "ci@just4.fun"
+
+git add --all
+git commit -a -m "Travis #$TRAVIS_BUILD_NUMBER"
+git push --force origin master
