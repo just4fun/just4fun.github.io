@@ -3,8 +3,8 @@
 # enable error reporting to the console
 set -e
 
-SRC_PATH = "src"
-DEPLOY_PATH = "deploy"
+SRC_PATH="src"
+DEPLOY_PATH="deploy"
 
 rm -rf $SRC_PATH
 rm -rf $DEPLOY_PATH
