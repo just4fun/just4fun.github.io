@@ -1,37 +1,106 @@
 ---
 layout: page
-title: About the Theme
-tags: [about, Jekyll, theme, moon]
-date: 2016-03-21
+title: About
 comments: false
 ---
-    
-<center><a href="http://taylantatli.github.io/Moon"><b>Moon</b></a> is a minimal, one column jekyll theme.</center>
 
-## Features
-* Minimal, you can focus on your content
-* Responsive
-* Disqus integration
-* Syntax highlighting
-* Optional post image
-* Social icons
-* Page for sharing projects
-* Optional background image
-* Simple navigation menu
-* MathJax support
+我活在世上，无非想要明白些道理，遇见些有趣的事。 ーー王小波   
+今はできなくても、もう一回やってみること。もう一回やってだめなら、さらにもう一回。 ーー加藤嘉一
 
-## Preview
-
-{% capture images %}
-    https://cloud.githubusercontent.com/assets/754514/14509720/61c61058-01d6-11e6-93ab-0918515ecd56.png
-    https://cloud.githubusercontent.com/assets/754514/14509716/61ac6c8e-01d6-11e6-879f-8308883de790.png
-{% endcapture %}
-{% include gallery images=images caption="Screenshots of Moon Theme" cols=2 %}
-
-See a [live version of Moon](http://taylantatli.github.io/Moon) hosted on GitHub.
-
-## Getting Started
-
-To learn how to install and use this theme check out the [Setup Guide](http://taylantatli.me/Moon/moon-theme/) for more information.
-      
-[Install Moon](https://github.com/TaylanTatli/Moon){: .btn}
+```javascript
+{
+  'name': 'Lei(Zoro) Jiang',
+  'birth': 1988,
+  'height': 182,
+  'education': 'UESTC',
+  'location': 'Chengdu, Sichuan, China',
+  'email': 'houritsunohikari@gmail.com',
+  'skills': {
+    'direction': 'Front End Engineering',
+    'details': {
+      'HTML': [
+        'HTML5',
+        'Handlebars'
+      ],
+      'JavaScript': [
+        'ES6',
+        'Backbone',
+        'Knockout',
+        'Angular 1.x',
+        'Ember',
+        'React',
+        'React Native',
+        'Node'
+      ],
+      'CSS': [
+        'CSS3',
+        'LESS',
+        'SASS'
+      ],
+      'Architecture': [
+        'MVC',
+        'MVVM',
+        'Flux',
+        'Redux'
+      ],
+      'Tools': [
+        'Grunt',
+        'Gulp',
+        'Browserify',
+        'Webpack'
+      ]
+    }
+  }
+  'projects': [
+    'work': [
+      'newkit': {
+        'description': 'An internal infrastructure which hosted lots of backend support projects',
+        'technology stack': [
+          'Angular 1.x',
+          'Bootstrap',
+          'LESS',
+          'Grunt',
+          'Express',
+          'mongoose',
+          'MongoDB'
+        ]
+      },
+      'insights': {
+        'description': 'An intelligent planner for activities',
+        'technology stack': [
+          'Ember',
+          'D3',
+          'SASS',
+          'Rails'
+        ]
+      }
+    ],
+    'individual': [
+      'meaning': {
+        'description': 'A mini fullstack blogging platform',
+        'technology stack': [
+          'Angular 1.x',
+          'Bootstrap',
+          'Grunt',
+          'Express',
+          'mongoose',
+          'MongoDB'
+        ]
+      }
+      'uestc-bbs-react-native': {
+        'description': 'An iOS client for http://bbs.uestc.edu.cn/',
+        'technology stack': [
+          'ES6',
+          'React Native',
+          'Redux'
+        ]
+      }
+    ]
+  ],
+  'socials': [
+    'GitHub': 'just4fun',
+    'Facebook': 'houritsunohikari',
+    'Instagram': 'houritsunohikari'
+  ]
+}
+```
