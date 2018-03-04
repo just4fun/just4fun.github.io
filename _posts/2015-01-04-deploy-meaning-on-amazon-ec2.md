@@ -83,7 +83,7 @@ In order to install Nginx we execute:
 $ apt-get install nginx
 ```
 Then create a virtual host configuration file in /etc/nginx/sites-available, such as `/etc/nginx/sites-available/just4fun`.
-```bash
+```nginx
 server {
   listen 80 default_server;
   listen [::]:80 default_server ipv6only=on;
