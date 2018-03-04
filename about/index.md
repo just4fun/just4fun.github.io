@@ -4,7 +4,7 @@ title: About
 comments: false
 ---
 
-<img src="/assets/img/logo_runner.jpg" alt="" style="width: 400px;"/>
+<img src="/assets/img/logo_runner.jpg" alt="" style="width: 400px; border-radius: 10px"/>
 
 <center><figcaption>我活在世上，无非想要明白些道理，遇见些有趣的事。 ーー王小波</figcaption></center>
 <center><figcaption>今はできなくても、もう一回やってみること。もう一回やってだめなら、さらにもう一回。 ーー加藤嘉一</figcaption></center>
