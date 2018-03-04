@@ -4,103 +4,23 @@ title: About
 comments: false
 ---
 
-我活在世上，无非想要明白些道理，遇见些有趣的事。 ーー王小波   
-今はできなくても、もう一回やってみること。もう一回やってだめなら、さらにもう一回。 ーー加藤嘉一
+<img src="/assets/img/logo_runner.jpg" alt="" style="width: 400px;"/>
 
-```javascript
-{
-  'name': 'Lei(Zoro) Jiang',
-  'birth': 1988,
-  'height': 182,
-  'education': 'UESTC',
-  'location': 'Chengdu, Sichuan, China',
-  'email': 'houritsunohikari@gmail.com',
-  'skills': {
-    'direction': 'Front End Engineering',
-    'details': {
-      'HTML': [
-        'HTML5',
-        'Handlebars'
-      ],
-      'JavaScript': [
-        'ES6',
-        'Backbone',
-        'Knockout',
-        'Angular 1.x',
-        'Ember',
-        'React',
-        'React Native',
-        'Node'
-      ],
-      'CSS': [
-        'CSS3',
-        'LESS',
-        'SASS'
-      ],
-      'Architecture': [
-        'MVC',
-        'MVVM',
-        'Flux',
-        'Redux'
-      ],
-      'Tools': [
-        'Grunt',
-        'Gulp',
-        'Browserify',
-        'Webpack'
-      ]
-    }
-  }
-  'projects': [
-    'work': [
-      'newkit': {
-        'description': 'An internal infrastructure which hosted lots of backend support projects',
-        'technology stack': [
-          'Angular 1.x',
-          'Bootstrap',
-          'LESS',
-          'Grunt',
-          'Express',
-          'mongoose',
-          'MongoDB'
-        ]
-      },
-      'insights': {
-        'description': 'An intelligent planner for activities',
-        'technology stack': [
-          'Ember',
-          'D3',
-          'SASS',
-          'Rails'
-        ]
-      }
-    ],
-    'individual': [
-      'meaning': {
-        'description': 'A mini fullstack blogging platform',
-        'technology stack': [
-          'Angular 1.x',
-          'Bootstrap',
-          'Grunt',
-          'Express',
-          'mongoose',
-          'MongoDB'
-        ]
-      }
-      'uestc-bbs-react-native': {
-        'description': 'An iOS client for http://bbs.uestc.edu.cn/',
-        'technology stack': [
-          'ES6',
-          'React Native',
-          'Redux'
-        ]
-      }
-    ]
-  ],
-  'socials': [
-    'GitHub': 'just4fun',
-    'Facebook': 'houritsunohikari',
-    'Instagram': 'houritsunohikari'
-  ]
-}
-```
+<center><figcaption>我活在世上，无非想要明白些道理，遇见些有趣的事。 ーー王小波</figcaption></center>
+<center><figcaption>今はできなくても、もう一回やってみること。もう一回やってだめなら、さらにもう一回。 ーー加藤嘉一</figcaption></center>
+
+## About me
+
+I'm a software developer 💻 who was born, educated, and now also working in Chengdu 🐼, China.
+
+I'm mainly focus on JavaScript development, including frontend, iOS (react native), node.
+
+During the time away from work, I like running 🏃, kick-boxing 🥊, and learning Japanese language 🇯🇵.
+
+- I have gone to many cities to attend full marathon.
+- I'm still been training in a fight club twice every week.
+- I have got JLPT (Japanese-Language Proficiency Test) N2 certificate many years ago.
+
+If you like my [projects](/projects) and wanna hire me, please ask me for cv via [email](mailto:houritsunohikari@gmail.com).
+
+If you are interested in me, please find my SNSs in [home](/).
