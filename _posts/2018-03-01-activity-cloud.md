@@ -6,6 +6,7 @@ excerpt: "The only predictive data insights tool that helps event organizers and
 project: true
 project_logo: /assets/img/projects/ActivityCloud_Events.png
 project_url: http://www.activitycloud.com/
+project_order: 1
 tag:
 - project
 - ember
