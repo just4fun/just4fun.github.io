@@ -92,7 +92,7 @@ output: []
 
 ---
 
-Per [mdn](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise), the executor normally initiates some **asynchronous** work, so `console.log('B')` will be scheduled to JS stack to execute directly.
+Per [mdn](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise), the executor function is executed **IMMEDIATELY** by the Promise implementation, so `console.log('B')` will be scheduled to JS stack to execute directly.
 
 ---
 
