@@ -1,16 +1,13 @@
 ---
 layout: post
 title: "Activity Cloud"
-date: 2018-03-01
 excerpt: "The only predictive data insights tool that helps event organizers and membership coordinators accurately identify when, where, and how to reach customers."
 project: true
 project_logo: /assets/img/projects/ActivityCloud_Events.png
 project_url: http://www.activitycloud.com/
 project_order: 1
-tag:
-- project
-- ember
-- d3
+category: projects
+permalink: /:categories/activity-cloud/
 comments: true
 
 ---
