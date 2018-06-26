@@ -26,6 +26,7 @@ Oct 2014 - Feb 2018
 
 ## What
 
+![](/assets/img/projects/ActivityCloud_Events_Home.png)
 ![](/assets/img/projects/ActivityCloud_Events.png)
 <center><figcaption>Event planning marketing software</figcaption></center>
 
