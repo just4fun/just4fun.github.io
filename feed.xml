@@ -1,0 +1,1148 @@
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.7.3">Jekyll</generator><link href="https://just4fun.github.io/feed.xml" rel="self" type="application/atom+xml" /><link href="https://just4fun.github.io/" rel="alternate" type="text/html" /><updated>2019-05-07T15:07:11+00:00</updated><id>https://just4fun.github.io/</id><title type="html">just4fun</title><subtitle>Zoro's personal blog.</subtitle><entry><title type="html">Rethink event loop</title><link href="https://just4fun.github.io/2018/03/15/rethink-event-loop/" rel="alternate" type="text/html" title="Rethink event loop" /><published>2018-03-15T00:00:00+00:00</published><updated>2018-03-15T00:00:00+00:00</updated><id>https://just4fun.github.io/2018/03/15/rethink-event-loop</id><content type="html" xml:base="https://just4fun.github.io/2018/03/15/rethink-event-loop/">&lt;h2 id=&quot;background&quot;&gt;Background&lt;/h2&gt;
+
+&lt;p&gt;I have been working on JavaScript development for several years, the &lt;code class=&quot;highlighter-rouge&quot;&gt;event loop&lt;/code&gt;, the basic but also abstract concept, I think I know it well after I went through Philip Roberts’s great talk on JSConf EU 2014.&lt;/p&gt;
+
+&lt;iframe width=&quot;560&quot; height=&quot;315&quot; src=&quot;https://www.youtube.com/embed/8aGhZQkoFbQ?rel=0&quot; frameborder=&quot;0&quot; allow=&quot;autoplay; encrypted-media&quot; allowfullscreen=&quot;&quot;&gt;&lt;/iframe&gt;
+
+&lt;p&gt;However, when I was reading &lt;a href=&quot;https://github.com/getify/You-Dont-Know-JS&quot;&gt;You don’t know JavaScript&lt;/a&gt;, I noticed there is &lt;a href=&quot;https://github.com/getify/You-Dont-Know-JS/blob/master/async%20%26%20performance/ch1.md#jobs&quot;&gt;Job queue&lt;/a&gt;, it is similar to &lt;code class=&quot;highlighter-rouge&quot;&gt;task queue&lt;/code&gt;, but the &lt;code class=&quot;highlighter-rouge&quot;&gt;jobs&lt;/code&gt; will be executed after each &lt;code class=&quot;highlighter-rouge&quot;&gt;task&lt;/code&gt;. What? Then I googled it, but more strange words entered my sight. &lt;code class=&quot;highlighter-rouge&quot;&gt;macrotask&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;microtask&lt;/code&gt;. Ha? Maybe I don’t understand event loop.&lt;/p&gt;
+
+&lt;h2 id=&quot;rethinking&quot;&gt;Rethinking&lt;/h2&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://user-images.githubusercontent.com/7512625/37471158-121bc6b4-28a4-11e8-8fce-181823d8de88.png&quot; alt=&quot;event-loop&quot; /&gt;&lt;/p&gt;
+
+&lt;center&gt;&lt;figcaption&gt;Diagram from Philip Roberts's talk&lt;/figcaption&gt;&lt;/center&gt;
+
+&lt;p&gt;In Philip’s great talk, he demonstrated how the asynchronous callbacks (like setTimeout, I/O) been scheduled to the &lt;code class=&quot;highlighter-rouge&quot;&gt;callback queue&lt;/code&gt; (aka &lt;code class=&quot;highlighter-rouge&quot;&gt;task queue&lt;/code&gt;), but one thing was missed. &lt;code class=&quot;highlighter-rouge&quot;&gt;microtask&lt;/code&gt;.&lt;/p&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;According to &lt;a href=&quot;https://html.spec.whatwg.org/multipage/webappapis.html#event-loops&quot;&gt;whatwg#webappapis#event-loops&lt;/a&gt;,&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Event loop is used to coordinate events, user interaction, scripts, rendering, networking, and so forth&lt;/li&gt;
+  &lt;li&gt;There are two kinds of event loops: those for &lt;code class=&quot;highlighter-rouge&quot;&gt;browsing contexts&lt;/code&gt;, and those for &lt;code class=&quot;highlighter-rouge&quot;&gt;workers&lt;/code&gt;&lt;/li&gt;
+  &lt;li&gt;An event loop has one or more &lt;code class=&quot;highlighter-rouge&quot;&gt;task queues&lt;/code&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Each&lt;/strong&gt; event loop has a &lt;code class=&quot;highlighter-rouge&quot;&gt;microtask queue&lt;/code&gt;&lt;/li&gt;
+  &lt;li&gt;If the JavaScript execution context stack is now empty, perform a microtask checkpoint&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;According to &lt;a href=&quot;https://html.spec.whatwg.org/multipage/webappapis.html#integration-with-the-javascript-job-queue&quot;&gt;whatwg#webappapis#integration-with-the-javascript-job-queue&lt;/a&gt;,&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;The JavaScript specification defines the JavaScript job and job queue abstractions in order to specify certain invariants about how &lt;code class=&quot;highlighter-rouge&quot;&gt;promise&lt;/code&gt; operations execute with a clean JavaScript execution context stack and in a certain order&lt;/li&gt;
+  &lt;li&gt;When the JavaScript specification says to call the EnqueueJob abstract operation … Queue a &lt;code class=&quot;highlighter-rouge&quot;&gt;microtask&lt;/code&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;According to &lt;a href=&quot;http://ecma-international.org/ecma-262/6.0/index.html#sec-jobs-and-job-queues&quot;&gt;ecma-262#sec-jobs-and-job-queues&lt;/a&gt;,&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Execution of a &lt;code class=&quot;highlighter-rouge&quot;&gt;Job&lt;/code&gt; can be initiated only when there is no running &lt;code class=&quot;highlighter-rouge&quot;&gt;execution context&lt;/code&gt; and the &lt;code class=&quot;highlighter-rouge&quot;&gt;execution context stack&lt;/code&gt; is empty&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;According to &lt;a href=&quot;https://github.com/getify/You-Dont-Know-JS/blob/master/async%20%26%20performance/ch1.md#event-loop&quot;&gt;You don’t know JavaScript#Event Loop&lt;/a&gt;,&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Each iteration of this loop is called a &lt;code class=&quot;highlighter-rouge&quot;&gt;tick&lt;/code&gt;. For each tick, if an event is waiting on the queue, it’s taken off and executed. These events are your function callbacks&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&quot;practise&quot;&gt;Practise&lt;/h2&gt;
+
+&lt;p&gt;Let’s say we have such code snippet.&lt;/p&gt;
+
+&lt;div class=&quot;language-javascript highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nx&quot;&gt;setTimeout&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;nx&quot;&gt;console&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;log&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'A'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;},&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+
+&lt;span class=&quot;k&quot;&gt;new&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;Promise&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;executor&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;resolve&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;nx&quot;&gt;console&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;log&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'B'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+  &lt;span class=&quot;nx&quot;&gt;resolve&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;();&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}).&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;then&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;nx&quot;&gt;console&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;log&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'C'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;});&lt;/span&gt;
+
+&lt;span class=&quot;nx&quot;&gt;console&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;log&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'D'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;The answer is &lt;code class=&quot;highlighter-rouge&quot;&gt;B D C A&lt;/code&gt;.&lt;/p&gt;
+
+&lt;h3 id=&quot;steps&quot;&gt;Steps&lt;/h3&gt;
+
+&lt;p&gt;JS stack: []&lt;br /&gt;
+macrotask queue: []&lt;br /&gt;
+microtask queue: [] &lt;br /&gt;
+output: []&lt;/p&gt;
+
+&lt;p&gt;👇&lt;/p&gt;
+
+&lt;p&gt;JS stack: []&lt;br /&gt;
+macrotask queue: [console.log(‘A’)]&lt;br /&gt;
+microtask queue: []&lt;br /&gt;
+output: []&lt;/p&gt;
+
+&lt;p&gt;👇&lt;/p&gt;
+
+&lt;p&gt;JS stack: [console.log(‘B’)]&lt;br /&gt;
+macrotask queue: [console.log(‘A’)]&lt;br /&gt;
+microtask queue: []&lt;br /&gt;
+output: []&lt;/p&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;Per &lt;a href=&quot;https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise&quot;&gt;mdn&lt;/a&gt;, the executor function is executed &lt;strong&gt;IMMEDIATELY&lt;/strong&gt; by the Promise implementation, so &lt;code class=&quot;highlighter-rouge&quot;&gt;console.log('B')&lt;/code&gt; will be scheduled to JS stack to execute directly.&lt;/p&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;👇&lt;/p&gt;
+
+&lt;p&gt;JS stack: []&lt;br /&gt;
+macrotask queue: [console.log(‘A’)]&lt;br /&gt;
+microtask queue: []&lt;br /&gt;
+output: [B]&lt;/p&gt;
+
+&lt;p&gt;👇&lt;/p&gt;
+
+&lt;p&gt;JS stack: []&lt;br /&gt;
+macrotask queue: [console.log(‘A’)]&lt;br /&gt;
+microtask queue: [console.log(‘C’)]&lt;br /&gt;
+output: [B]&lt;/p&gt;
+
+&lt;p&gt;👇&lt;/p&gt;
+
+&lt;p&gt;JS stack: [console.log(‘D’)]&lt;br /&gt;
+macrotask queue: [console.log(‘A’)]&lt;br /&gt;
+microtask queue: [console.log(‘C’)]&lt;br /&gt;
+output: [B]&lt;/p&gt;
+
+&lt;p&gt;👇&lt;/p&gt;
+
+&lt;p&gt;JS stack: []&lt;br /&gt;
+macrotask queue: [console.log(‘A’)]&lt;br /&gt;
+microtask queue: [console.log(‘C’)]&lt;br /&gt;
+output: [B, D]&lt;/p&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;Now all synchronous code done and the JS stack is empty, so we are going to pick task from task queues. However, there is a confusing part. Should we pick task from macro queue first or micro queue first? The final output is &lt;code class=&quot;highlighter-rouge&quot;&gt;C A&lt;/code&gt;, it seems like we pick task from micro queue first.&lt;/p&gt;
+
+&lt;p&gt;IMO, we could consider this case in two ways.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Microtask queue is processed at the &lt;strong&gt;end&lt;/strong&gt; of each macrotask, then you should treat whole script as a macrotask as well. In this way, our diagram will become&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;JS stack: [script]&lt;br /&gt;
+macrotask queue: [console.log(‘A’)]&lt;br /&gt;
+microtask queue: [console.log(‘C’)]&lt;br /&gt;
+output: [B, D]&lt;/p&gt;
+
+&lt;p&gt;At this time, pop script task out first, then execute microtasks.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;If you don’t treat whole script as macrotask, you can think we will pick task from microtask queue when JS stack is empty at first time&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;👇&lt;/p&gt;
+
+&lt;p&gt;JS stack: [console.log(‘C’)]&lt;br /&gt;
+macrotask queue: [console.log(‘A’)]&lt;br /&gt;
+microtask queue: []&lt;br /&gt;
+output: [B, D]&lt;/p&gt;
+
+&lt;p&gt;👇&lt;/p&gt;
+
+&lt;p&gt;JS stack: []&lt;br /&gt;
+macrotask queue: [console.log(‘A’)]&lt;br /&gt;
+microtask queue: []&lt;br /&gt;
+output: [B, D, C]&lt;/p&gt;
+
+&lt;p&gt;👇&lt;/p&gt;
+
+&lt;p&gt;JS stack: [console.log(‘A’)]&lt;br /&gt;
+macrotask queue: []&lt;br /&gt;
+microtask queue: []&lt;br /&gt;
+output: [B, D, C]&lt;/p&gt;
+
+&lt;p&gt;👇&lt;/p&gt;
+
+&lt;p&gt;JS stack: []&lt;br /&gt;
+macrotask queue: []&lt;br /&gt;
+microtask queue: []&lt;br /&gt;
+output: [B, D, C, A]&lt;/p&gt;
+
+&lt;p&gt;It’s done.&lt;/p&gt;
+
+&lt;h2 id=&quot;conclusion&quot;&gt;Conclusion&lt;/h2&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;task (queue) === marcotask (queue)&lt;/li&gt;
+  &lt;li&gt;job (queue) ≈≈≈ microtask (queue) (Per You don’t know JavaScript, they are same; but per ecma, there are two kinds of jobs, &lt;code class=&quot;highlighter-rouge&quot;&gt;ScriptJobs&lt;/code&gt; and &lt;code class=&quot;highlighter-rouge&quot;&gt;PromiseJobs&lt;/code&gt;, I don’t understand &lt;code class=&quot;highlighter-rouge&quot;&gt;ScriptJobs&lt;/code&gt; clearly, but the most important thing we should know is &lt;code class=&quot;highlighter-rouge&quot;&gt;promise.then&lt;/code&gt; is one kind of &lt;code class=&quot;highlighter-rouge&quot;&gt;microtask&lt;/code&gt;&lt;/li&gt;
+  &lt;li&gt;When JS stack (aka execution stack, or call stack) is empty, pick the oldest task from macro queue into JS stack to execute, then pick &lt;strong&gt;ALL&lt;/strong&gt; tasks (or jobs) from micro queue to execute, then pick the oldest task from macro queue again&lt;/li&gt;
+  &lt;li&gt;macrotasks: script (whole script, you can consider it as main()), setTimeout, setInterval, setImmediate, I/O, UI rendering&lt;/li&gt;
+  &lt;li&gt;microtasks: process.nextTick, Promises, Object.observe, MutationObserver&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&quot;references&quot;&gt;References&lt;/h2&gt;
+
+&lt;h3 id=&quot;standard&quot;&gt;Standard&lt;/h3&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;a href=&quot;https://html.spec.whatwg.org/multipage/webappapis.html#event-loops&quot;&gt;https://html.spec.whatwg.org/multipage/webappapis.html#event-loops&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://html.spec.whatwg.org/multipage/webappapis.html#integration-with-the-javascript-job-queue&quot;&gt;https://html.spec.whatwg.org/multipage/webappapis.html#integration-with-the-javascript-job-queue&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;http://ecma-international.org/ecma-262/6.0/index.html#sec-jobs-and-job-queues&quot;&gt;http://ecma-international.org/ecma-262/6.0/index.html#sec-jobs-and-job-queues&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h3 id=&quot;books&quot;&gt;Books&lt;/h3&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;a href=&quot;https://github.com/getify/You-Dont-Know-JS/blob/master/async%20%26%20performance/ch1.md#event-loop&quot;&gt;https://github.com/getify/You-Dont-Know-JS/blob/master/async%20%26%20performance/ch1.md#event-loop&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h3 id=&quot;articles&quot;&gt;Articles&lt;/h3&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;a href=&quot;https://jakearchibald.com/2015/tasks-microtasks-queues-and-schedules/&quot;&gt;https://jakearchibald.com/2015/tasks-microtasks-queues-and-schedules/&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;</content><author><name></name></author><category term="javascript" /><category term="event loop" /><summary type="html">What the heck is the event loop anyway? – Philip Roberts</summary></entry><entry><title type="html">When should we push records to Ember Data?</title><link href="https://just4fun.github.io/2017/07/12/when-should-we-push-records-to-ember-data/" rel="alternate" type="text/html" title="When should we push records to Ember Data?" /><published>2017-07-12T00:00:00+00:00</published><updated>2017-07-12T00:00:00+00:00</updated><id>https://just4fun.github.io/2017/07/12/when-should-we-push-records-to-ember-data</id><content type="html" xml:base="https://just4fun.github.io/2017/07/12/when-should-we-push-records-to-ember-data/">&lt;p&gt;Hey, I resovled an interesting defect these days about Ember data and I wanna share it to you all.&lt;/p&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;Let’s say we have three kinds of components on the page.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://user-images.githubusercontent.com/7512625/28120727-75de7e32-674b-11e7-9707-c40d79750209.png&quot; alt=&quot;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Regarding &lt;code class=&quot;highlighter-rouge&quot;&gt;overview-goals-month-goal.js&lt;/code&gt;, its main content is an &lt;code class=&quot;highlighter-rouge&quot;&gt;input&lt;/code&gt; element.&lt;/p&gt;
+
+&lt;p&gt;We have a computed property named &lt;code class=&quot;highlighter-rouge&quot;&gt;readonlyMonth&lt;/code&gt; in top component &lt;code class=&quot;highlighter-rouge&quot;&gt;overview-goals.js&lt;/code&gt; to indicate whether each input element is readonly or not, then pass it down.&lt;/p&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-javascript&quot; data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;nx&quot;&gt;readonlyMonth&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;computed&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'data.months.1.goals.@each.goal-id'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;kd&quot;&gt;get&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;kd&quot;&gt;let&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;thisMonthGoals&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;get&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'data.months.1.goals'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+
+    &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+      &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;kc&quot;&gt;true&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+      &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;kc&quot;&gt;false&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+      &lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;isEmpty&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;thisMonthGoals&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;||&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;thisMonthGoals&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;any&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;((&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;goal&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&amp;gt;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;!&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;goal&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'goal-id'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]))&lt;/span&gt;
+    &lt;span class=&quot;p&quot;&gt;};&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;})&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;p&gt;That said, for the first input, it’s always readonly. &lt;br /&gt;
+For the second one, it’s always editable.&lt;/p&gt;
+
+&lt;p&gt;As for third input element, it depends on whether second input has value, which means it always be readonly unless the second input has value.&lt;/p&gt;
+
+&lt;figure class=&quot;half&quot;&gt;
+  &lt;img src=&quot;https://user-images.githubusercontent.com/7512625/28121513-ecf6a5ba-674d-11e7-9ddd-427266bf42e4.png&quot; /&gt;
+  &lt;img src=&quot;https://user-images.githubusercontent.com/7512625/28121514-ed03f6ca-674d-11e7-89df-3482e6825147.png&quot; /&gt;
+  &lt;figcaption&gt;Once we gave second input any value, the third input will be editable immediately.&lt;/figcaption&gt;
+&lt;/figure&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;For more background, I’d also like to share the data structure and API response.&lt;/p&gt;
+
+&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;model/goal-reports.js&lt;/code&gt;&lt;/p&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-javascript&quot; data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;k&quot;&gt;export&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;default&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;Model&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;extend&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;({&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;summary&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;attr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(),&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;months&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;attr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(),&lt;/span&gt;
+
+  &lt;span class=&quot;na&quot;&gt;goalMonths&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;computed&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'months.[]'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;kd&quot;&gt;get&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+      &lt;span class=&quot;kd&quot;&gt;let&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;months&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;get&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'months'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+      &lt;span class=&quot;kd&quot;&gt;let&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;goals&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;get&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'goals'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+
+      &lt;span class=&quot;nx&quot;&gt;months&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;forEach&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;month&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&amp;gt;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+        &lt;span class=&quot;nx&quot;&gt;month&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;goals&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;forEach&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;goal&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&amp;gt;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+          &lt;span class=&quot;nx&quot;&gt;goal&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;goal&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;goals&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;findBy&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'id'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;goal&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'goal-id'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]);&lt;/span&gt;
+        &lt;span class=&quot;p&quot;&gt;});&lt;/span&gt;
+      &lt;span class=&quot;p&quot;&gt;});&lt;/span&gt;
+
+      &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;months&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+    &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;}),&lt;/span&gt;
+
+  &lt;span class=&quot;na&quot;&gt;goals&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;hasMany&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'goal'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;});&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;model/goal.js&lt;/code&gt;&lt;/p&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-javascript&quot; data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;k&quot;&gt;export&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;default&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;Model&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;extend&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;({&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;goalValue&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;attr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'number'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;),&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;goalYear&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;attr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(),&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;goalMonth&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;attr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
+
+  &lt;span class=&quot;c1&quot;&gt;//...&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;});&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;p&gt;If we give second input any value, &lt;code class=&quot;highlighter-rouge&quot;&gt;POST /api/goals&lt;/code&gt; will be requested once we focused out. &lt;br /&gt;
+When we get 200, as we know, Ember data will fill &lt;code class=&quot;highlighter-rouge&quot;&gt;id&lt;/code&gt; with API response.&lt;/p&gt;
+
+&lt;p class=&quot;notice&quot;&gt;&lt;strong&gt;Here comes the question,&lt;/strong&gt; the goal record we saved is equal to the &lt;code class=&quot;highlighter-rouge&quot;&gt;goal.goal&lt;/code&gt; in each months (see the computed property &lt;code class=&quot;highlighter-rouge&quot;&gt;goalMonths&lt;/code&gt; in &lt;code class=&quot;highlighter-rouge&quot;&gt;goal-reports&lt;/code&gt; model), why the third input still be readonly even &lt;code class=&quot;highlighter-rouge&quot;&gt;goalRecord.save()&lt;/code&gt; successfully?&lt;/p&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;Let’s take a look at the API response when we access this page.&lt;/p&gt;
+
+&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;GET /api/goal-reports&lt;/code&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://user-images.githubusercontent.com/7512625/28122819-ea017228-6751-11e7-93d9-da6b8549235c.png&quot; alt=&quot;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;There are two problems.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;readonlyMonth&lt;/code&gt; in top component hasn’t been triggered&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;It’s caused by that &lt;code class=&quot;highlighter-rouge&quot;&gt;goalMonths&lt;/code&gt; in &lt;code class=&quot;highlighter-rouge&quot;&gt;goal-reports&lt;/code&gt; model hasn’t been triggered, b/c the length of &lt;code class=&quot;highlighter-rouge&quot;&gt;months&lt;/code&gt; is same. &lt;br /&gt;
+Since &lt;code class=&quot;highlighter-rouge&quot;&gt;goalRecord.save()&lt;/code&gt; successfully, there will be one more &lt;code class=&quot;highlighter-rouge&quot;&gt;goal&lt;/code&gt; record in Ember data (we will discuss more about this in second problem), we should also add &lt;code class=&quot;highlighter-rouge&quot;&gt;goals.[]&lt;/code&gt; to computed property &lt;code class=&quot;highlighter-rouge&quot;&gt;goalMonths&lt;/code&gt;.&lt;/p&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-javascript&quot; data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;nx&quot;&gt;goalMonths&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;computed&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'months.[]'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'goals.[]'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;kd&quot;&gt;get&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;kd&quot;&gt;let&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;months&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;get&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'months'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+    &lt;span class=&quot;kd&quot;&gt;let&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;goals&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;get&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'goals'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+
+    &lt;span class=&quot;nx&quot;&gt;months&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;forEach&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;month&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&amp;gt;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+      &lt;span class=&quot;nx&quot;&gt;month&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;goals&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;forEach&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;goal&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&amp;gt;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+        &lt;span class=&quot;nx&quot;&gt;goal&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;goal&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;goals&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;findBy&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'id'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;goal&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'goal-id'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]);&lt;/span&gt;
+      &lt;span class=&quot;p&quot;&gt;});&lt;/span&gt;
+    &lt;span class=&quot;p&quot;&gt;});&lt;/span&gt;
+
+    &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;months&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}),&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;The &lt;code class=&quot;highlighter-rouge&quot;&gt;goal-id&lt;/code&gt; of second object in &lt;code class=&quot;highlighter-rouge&quot;&gt;months&lt;/code&gt; is empty.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;In this case, even we add &lt;code class=&quot;highlighter-rouge&quot;&gt;goals.[]&lt;/code&gt; to computed property &lt;code class=&quot;highlighter-rouge&quot;&gt;goalMonths&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;goalMonths&lt;/code&gt; won’t be triggered as well.&lt;/p&gt;
+
+&lt;p&gt;As we know, the &lt;code class=&quot;highlighter-rouge&quot;&gt;goals&lt;/code&gt; of &lt;code class=&quot;highlighter-rouge&quot;&gt;goal-reports&lt;/code&gt; model is returned in &lt;code class=&quot;highlighter-rouge&quot;&gt;included&lt;/code&gt; field from API, that said even the new &lt;code class=&quot;highlighter-rouge&quot;&gt;goal&lt;/code&gt; record with &lt;code class=&quot;highlighter-rouge&quot;&gt;id&lt;/code&gt; has been update in store/Ember data, the &lt;code class=&quot;highlighter-rouge&quot;&gt;goals&lt;/code&gt; in &lt;code class=&quot;highlighter-rouge&quot;&gt;goal-reprots&lt;/code&gt; will still keep the same.&lt;/p&gt;
+
+&lt;p class=&quot;notice&quot;&gt;&lt;strong&gt;Here come the resolution.&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;First we should create a closure action (&lt;code class=&quot;highlighter-rouge&quot;&gt;refreshReport&lt;/code&gt;) in top component and pass it down. &lt;br /&gt;
+When &lt;code class=&quot;highlighter-rouge&quot;&gt;goalRecord.save()&lt;/code&gt; successfully, the closure action should be triggered with the new &lt;code class=&quot;highlighter-rouge&quot;&gt;goal&lt;/code&gt; record.&lt;/p&gt;
+
+&lt;p&gt;Then in top component,&lt;/p&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-javascript&quot; data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;nx&quot;&gt;refreshReport&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;goal&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;c1&quot;&gt;// first, get `goalsReport` from Ember data&lt;/span&gt;
+  &lt;span class=&quot;kd&quot;&gt;let&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;goalReports&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;get&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'store'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;).&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;peekAll&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'goalsReport'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;).&lt;/span&gt;&lt;span class=&quot;kd&quot;&gt;get&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'firstObject'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+
+  &lt;span class=&quot;c1&quot;&gt;// then figure out which month (as known as `input` I mentioned)&lt;/span&gt;
+  &lt;span class=&quot;kd&quot;&gt;let&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;month&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;goalReports&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;kd&quot;&gt;get&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'months'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;).&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;find&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;month&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&amp;gt;&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;getMonth&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;month&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;date&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;===&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;goal&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;kd&quot;&gt;get&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'goalMonth'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;));&lt;/span&gt;
+
+  &lt;span class=&quot;c1&quot;&gt;// check whether the input has no value before&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;!&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;month&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;goals&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;][&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'goal-id'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;])&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;c1&quot;&gt;// set the `goal-id` with new `goal` record id&lt;/span&gt;
+    &lt;span class=&quot;kd&quot;&gt;set&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;month&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;goals&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;],&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'goal-id'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;goal&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;id&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+
+    &lt;span class=&quot;c1&quot;&gt;// push the new `goal` record into `goals` relationship in `goal-reports`.&lt;/span&gt;
+    &lt;span class=&quot;c1&quot;&gt;// then `goalMonths` will be triggered, and new `goal` will be filled in&lt;/span&gt;
+    &lt;span class=&quot;c1&quot;&gt;// each month, and also `readonlyMonth` will be re-triggered.&lt;/span&gt;
+    &lt;span class=&quot;nx&quot;&gt;goalReports&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;kd&quot;&gt;get&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'goals'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;).&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;pushObject&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;goal&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;p&gt;Does it makes sense?&lt;/p&gt;</content><author><name></name></author><category term="JavaScript" /><category term="Ember" /><summary type="html">Hey, I resovled an interesting defect these days about Ember data and I wanna share it to you all.</summary></entry><entry><title type="html">Reloading in Ember findAll and findRecord</title><link href="https://just4fun.github.io/2017/01/21/reloading-in-ember-findall-and-findrecord/" rel="alternate" type="text/html" title="Reloading in Ember findAll and findRecord" /><published>2017-01-21T00:00:00+00:00</published><updated>2017-01-21T00:00:00+00:00</updated><id>https://just4fun.github.io/2017/01/21/reloading-in-ember-findall-and-findrecord</id><content type="html" xml:base="https://just4fun.github.io/2017/01/21/reloading-in-ember-findall-and-findrecord/">&lt;p&gt;Recently, QA reported two issues that which seems a little weird. After some investigations, I found they’re caused by my lack of knowledge of Ember Data APIs.&lt;/p&gt;
+
+&lt;h2 id=&quot;background&quot;&gt;Background&lt;/h2&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;We always got old records in Ember Data even it seems we have already sent new request and got new records from API&lt;/strong&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;In our application, there is a dropdown list at the top of screen which contains many &lt;code class=&quot;highlighter-rouge&quot;&gt;branches&lt;/code&gt;. Once we select a new branch, we will send a request.&lt;/p&gt;
+
+&lt;div class=&quot;language-javascript highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nx&quot;&gt;didReceiveAttrs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;_super&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(...&lt;/span&gt;&lt;span class=&quot;kr&quot;&gt;arguments&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;setupFilterGroups&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;();&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;},&lt;/span&gt;
+
+&lt;span class=&quot;nx&quot;&gt;setupFilterGroups&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;c1&quot;&gt;// ...&lt;/span&gt;
+
+  &lt;span class=&quot;kd&quot;&gt;get&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'store'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;).&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;findAll&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'zipcodeFilter'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;).&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;then&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;zipcodes&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&amp;gt;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;c1&quot;&gt;// we always got old `zipcodes` for last branch even we switched to a new branch&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;});&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;After I dug into &lt;a href=&quot;http://emberjs.com/api/data/classes/DS.Store.html#method_findAll&quot;&gt;documentation&lt;/a&gt; for &lt;code class=&quot;highlighter-rouge&quot;&gt;findAll&lt;/code&gt;,&lt;/p&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;findAll&lt;/code&gt; asks the adapter’s &lt;code class=&quot;highlighter-rouge&quot;&gt;findAll&lt;/code&gt; method to find the records for the given type, and returns a promise which will resolve with all records of this type present in the store, even if the adapter only returns a subset of them.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;In addition,&lt;/p&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;When the returned promise resolves depends on the reload behavior, configured via the passed &lt;code class=&quot;highlighter-rouge&quot;&gt;options&lt;/code&gt; hash and the result of the adapter’s &lt;code class=&quot;highlighter-rouge&quot;&gt;shouldReloadAll&lt;/code&gt; method.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;There is also an example,&lt;/p&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;If &lt;code class=&quot;highlighter-rouge&quot;&gt;{ reload: true }&lt;/code&gt; is passed or &lt;code class=&quot;highlighter-rouge&quot;&gt;adapter.shouldReloadAll&lt;/code&gt; evaluates to &lt;code class=&quot;highlighter-rouge&quot;&gt;true&lt;/code&gt;, then the returned promise resolves once the adapter returns data, regardless if there are already records in the store:&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;div class=&quot;language-javascript highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nx&quot;&gt;store&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;push&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;({&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;id&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'first'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+    &lt;span class=&quot;na&quot;&gt;type&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'author'&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;});&lt;/span&gt;
+
+&lt;span class=&quot;c1&quot;&gt;// adapter#findAll resolves with&lt;/span&gt;
+&lt;span class=&quot;c1&quot;&gt;// [&lt;/span&gt;
+&lt;span class=&quot;c1&quot;&gt;//   {&lt;/span&gt;
+&lt;span class=&quot;c1&quot;&gt;//     id: 'second',&lt;/span&gt;
+&lt;span class=&quot;c1&quot;&gt;//     type: 'author'&lt;/span&gt;
+&lt;span class=&quot;c1&quot;&gt;//   }&lt;/span&gt;
+&lt;span class=&quot;c1&quot;&gt;// ]&lt;/span&gt;
+
+&lt;span class=&quot;nx&quot;&gt;store&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;findAll&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'author'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;reload&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;kc&quot;&gt;true&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;}).&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;then&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;authors&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;nx&quot;&gt;authors&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;getEach&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&quot;id&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// ['first', 'second']&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;});&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;If no reload is indicated via the abovementioned ways, then the promise immediately resolves with all the records currently loaded in the store.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;That being said, without &lt;code class=&quot;highlighter-rouge&quot;&gt;reload: true&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;findAll&lt;/code&gt; will always be resolved immediately if there are already records in the store, which will cause current issue.&lt;/p&gt;
+
+&lt;div class=&quot;language-javascript highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nx&quot;&gt;didReceiveAttrs&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;_super&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(...&lt;/span&gt;&lt;span class=&quot;kr&quot;&gt;arguments&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;setupFilterGroups&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;();&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;},&lt;/span&gt;
+
+&lt;span class=&quot;nx&quot;&gt;setupFilterGroups&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;c1&quot;&gt;// ...&lt;/span&gt;
+
+  &lt;span class=&quot;kd&quot;&gt;get&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'store'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;).&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;findAll&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'zipcodeFilter'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;reload&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;kc&quot;&gt;true&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;}).&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;then&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;zipcodes&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&amp;gt;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;c1&quot;&gt;// it WORKS now, `zipcodes` will always be new records from API&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;});&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;A button will always be enabled before all the requests it depends on resolved&lt;/strong&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;There is a button in our application, we introduced &lt;a href=&quot;http://ember-concurrency.com/&quot;&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;ember-concurrency&lt;/code&gt;&lt;/a&gt; and bound &lt;code class=&quot;highlighter-rouge&quot;&gt;disabled=isProcessing&lt;/code&gt; to it with three &lt;code class=&quot;highlighter-rouge&quot;&gt;task&lt;/code&gt;s.&lt;/p&gt;
+
+&lt;div class=&quot;language-javascript highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nx&quot;&gt;createFollowup&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;task&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;followupStatus&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;followupDate&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;c1&quot;&gt;// ...&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}),&lt;/span&gt;
+
+&lt;span class=&quot;nx&quot;&gt;clearFollowup&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;task&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;c1&quot;&gt;// ...&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}),&lt;/span&gt;
+
+&lt;span class=&quot;nx&quot;&gt;createContactAttempt&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;task&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;subject&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;notes&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;contactStatus&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;c1&quot;&gt;// ...&lt;/span&gt;
+
+  &lt;span class=&quot;k&quot;&gt;yield&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;store&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;findRecord&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'member'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;kd&quot;&gt;get&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'id'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;));&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}),&lt;/span&gt;
+
+&lt;span class=&quot;nx&quot;&gt;isProcessing&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;Ember&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;computed&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;or&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'createFollowup.isRunning'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'clearFollowup.isRunning'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'createContactAttempt.isRunning'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;However, the button is still disabled before &lt;code class=&quot;highlighter-rouge&quot;&gt;createFollowup&lt;/code&gt; and &lt;code class=&quot;highlighter-rouge&quot;&gt;clearFollowup&lt;/code&gt; resolved, but it will be enabled once both of them finished without &lt;code class=&quot;highlighter-rouge&quot;&gt;createContactAttempt&lt;/code&gt; being resolved.&lt;/p&gt;
+
+&lt;p&gt;The root cause is same as previous case,&lt;/p&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;If the record is not yet available, the store will ask the adapter’s &lt;code class=&quot;highlighter-rouge&quot;&gt;find&lt;/code&gt; method to find the necessary data. If the record is already present in the store, it depends on the reload behavior &lt;em&gt;when&lt;/em&gt; the returned promise resolves.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;That said, if there is no &lt;code class=&quot;highlighter-rouge&quot;&gt;reload: true&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;findRecord&lt;/code&gt; will resolve the old value from Ember Data first, which will lead &lt;code class=&quot;highlighter-rouge&quot;&gt;createContactAttempt.isRunning&lt;/code&gt; to be &lt;code class=&quot;highlighter-rouge&quot;&gt;false&lt;/code&gt; even &lt;code class=&quot;highlighter-rouge&quot;&gt;member&lt;/code&gt; is still being fetched.&lt;/p&gt;
+
+&lt;div class=&quot;language-javascript highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nx&quot;&gt;createContactAttempt&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;task&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;subject&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;notes&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;contactStatus&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;c1&quot;&gt;// ...&lt;/span&gt;
+
+  &lt;span class=&quot;c1&quot;&gt;// it WORKS now, `createContactAttempt.isRunning` always be `true` before all `task`s resolved&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;yield&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;store&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;findRecord&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'member'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;kd&quot;&gt;get&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'id'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;),&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;reload&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;kc&quot;&gt;true&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;});&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;})&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;h2 id=&quot;conclusion&quot;&gt;Conclusion&lt;/h2&gt;
+
+&lt;p&gt;Like the Ember official website mentioned,&lt;/p&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;Ember is a framework for creating &lt;strong&gt;ambitious&lt;/strong&gt; web applications.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;There are lots of advanced usage for Ember, if there is anything weird, we can always refer Ember APIs documentation first.&lt;/p&gt;</content><author><name></name></author><category term="ember" /><summary type="html">Recently, QA reported two issues that which seems a little weird. After some investigations, I found they’re caused by my lack of knowledge of Ember Data APIs.</summary></entry><entry><title type="html">Flux vs Redux</title><link href="https://just4fun.github.io/2016/07/13/flux-vs-redux/" rel="alternate" type="text/html" title="Flux vs Redux" /><published>2016-07-13T00:00:00+00:00</published><updated>2016-07-13T00:00:00+00:00</updated><id>https://just4fun.github.io/2016/07/13/flux-vs-redux</id><content type="html" xml:base="https://just4fun.github.io/2016/07/13/flux-vs-redux/">&lt;p&gt;&lt;a href=&quot;https://github.com/reactjs/redux&quot;&gt;Redux&lt;/a&gt; is very popular in recent two years, it seems like it has become the standard architecture in React application.&lt;/p&gt;
+
+&lt;p&gt;Let’s compare it with original &lt;a href=&quot;2015/05/12/flux-architecture/&quot;&gt;Flux&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;As Redux &lt;a href=&quot;http://redux.js.org/index.html&quot;&gt;official doc&lt;/a&gt; mentioned,&lt;/p&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;Redux evolves the ideas of Flux, but avoids its complexity.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;That being said, Redux is also utilizing &lt;strong&gt;unidirectional&lt;/strong&gt; data flow.&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;But what is the main difference between them?&lt;/em&gt;
+&lt;em&gt;And what is the complexity of Flux?&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;As we know, Redux has &lt;strong&gt;three principles&lt;/strong&gt;.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Single source of truth&lt;/li&gt;
+  &lt;li&gt;State is read-only&lt;/li&gt;
+  &lt;li&gt;Changes are made with pure functions&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;IMO, the main difference between Redux and Flux is mainly focused on the first one.&lt;/p&gt;
+
+&lt;h2 id=&quot;flux-way&quot;&gt;Flux Way&lt;/h2&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;Dispatcher&lt;/strong&gt; distributes &lt;strong&gt;Actions&lt;/strong&gt; to &lt;strong&gt;Stores&lt;/strong&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Stores&lt;/strong&gt; broadcast events to notify &lt;strong&gt;Views&lt;/strong&gt; to update&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;We noticed that &lt;strong&gt;Stores&lt;/strong&gt; is plural, which means we can use multiple stores in Flux architecture.&lt;/p&gt;
+
+&lt;p&gt;Let’s go through an example from Flux source code.&lt;/p&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;Consider there is a flight destination form, which selects a default city when a country is selected.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;div class=&quot;language-javascript highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;kd&quot;&gt;let&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;flightDispatcher&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;new&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;Dispatcher&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;();&lt;/span&gt;
+
+&lt;span class=&quot;c1&quot;&gt;// keeps track of which country is selected&lt;/span&gt;
+&lt;span class=&quot;kd&quot;&gt;let&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;CountryStore&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;country&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;kc&quot;&gt;null&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;};&lt;/span&gt;
+
+&lt;span class=&quot;c1&quot;&gt;// keeps track of which city is selected&lt;/span&gt;
+&lt;span class=&quot;kd&quot;&gt;let&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;CityStore&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;city&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;kc&quot;&gt;null&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;};&lt;/span&gt;
+
+&lt;span class=&quot;c1&quot;&gt;// keeps track of the base flight price of the selected city&lt;/span&gt;
+&lt;span class=&quot;kd&quot;&gt;let&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;FlightPriceStore&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;price&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;kc&quot;&gt;null&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;};&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;When a user changes the selected city, we dispatch the payload.&lt;/p&gt;
+
+&lt;div class=&quot;language-javascript highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nx&quot;&gt;flightDispatcher&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;dispatch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;({&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;actionType&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'city-update'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;selectedCity&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'paris'&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;});&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;This payload is digested by &lt;code class=&quot;highlighter-rouge&quot;&gt;CityStore&lt;/code&gt;.&lt;/p&gt;
+
+&lt;div class=&quot;language-javascript highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nx&quot;&gt;flightDispatcher&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;register&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;payload&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;payload&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;actionType&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;===&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'city-update'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;nx&quot;&gt;CityStore&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;city&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;payload&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;selectedCity&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;});&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;When the user selects a country, we dispatch the payload.&lt;/p&gt;
+
+&lt;div class=&quot;language-javascript highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nx&quot;&gt;flightDispatcher&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;dispatch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;({&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;actionType&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'country-update'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;selectedCountry&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'australia'&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;});&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;This payload is digested by &lt;strong&gt;BOTH&lt;/strong&gt; stores.&lt;/p&gt;
+
+&lt;div class=&quot;language-javascript highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nx&quot;&gt;CountryStore&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;dispatchToken&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;flightDispatcher&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;register&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;payload&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;payload&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;actionType&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;===&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'country-update'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;nx&quot;&gt;CountryStore&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;country&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;payload&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;selectedCountry&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;});&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;When the callback to update &lt;code class=&quot;highlighter-rouge&quot;&gt;CountryStore&lt;/code&gt; is registered, we save a reference to the returned token. Using this token with &lt;code class=&quot;highlighter-rouge&quot;&gt;waitFor()&lt;/code&gt;, we can guarantee that &lt;code class=&quot;highlighter-rouge&quot;&gt;CountryStore&lt;/code&gt; is updated before the callback that updates &lt;code class=&quot;highlighter-rouge&quot;&gt;CityStore&lt;/code&gt; needs to query its data.&lt;/p&gt;
+
+&lt;div class=&quot;language-javascript highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nx&quot;&gt;CityStore&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;dispatchToken&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;flightDispatcher&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;register&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;payload&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;payload&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;actionType&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;===&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'country-update'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;c1&quot;&gt;// `CountryStore.country` may not be updated&lt;/span&gt;
+    &lt;span class=&quot;nx&quot;&gt;flightDispatcher&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;waitFor&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;([&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;CountryStore&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;dispatchToken&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]);&lt;/span&gt;
+    &lt;span class=&quot;c1&quot;&gt;// `CountryStore.country` is now guaranteed to be updated&lt;/span&gt;
+
+    &lt;span class=&quot;c1&quot;&gt;// select the default city for the new country&lt;/span&gt;
+    &lt;span class=&quot;nx&quot;&gt;CityStore&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;city&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;getDefaultCityForCountry&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;CountryStore&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;country&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;});&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;The &lt;code class=&quot;highlighter-rouge&quot;&gt;country-update&lt;/code&gt; payload will be guaranteed to invoke the stores’ registered callbacks in order: &lt;code class=&quot;highlighter-rouge&quot;&gt;CountryStore&lt;/code&gt;, then &lt;code class=&quot;highlighter-rouge&quot;&gt;CityStore&lt;/code&gt;.&lt;/p&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;You may noticed that we should do lots of stuff in Flux.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;should register callbacks both in CountryStore and CityStore to update state&lt;/li&gt;
+  &lt;li&gt;should register callbacks both in CountryView and CityView to update views (omitted in code above)&lt;/li&gt;
+  &lt;li&gt;should use &lt;code class=&quot;highlighter-rouge&quot;&gt;waitFor()&lt;/code&gt; if we want to guarantee the update order between different stores&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;IMO, these are the &lt;strong&gt;complexities&lt;/strong&gt; in Flux.&lt;/p&gt;
+
+&lt;h2 id=&quot;redux-way&quot;&gt;Redux Way&lt;/h2&gt;
+
+&lt;p&gt;In Redux, there is no Dispatcher (but there is &lt;code class=&quot;highlighter-rouge&quot;&gt;store.dispatch()&lt;/code&gt;), moreover, there in only a &lt;strong&gt;SINGLE&lt;/strong&gt; store, which holds the whole application state in a &lt;strong&gt;SINGLE&lt;/strong&gt; object.&lt;/p&gt;
+
+&lt;p&gt;Let’s update the code above in Redux approach.&lt;/p&gt;
+
+&lt;p&gt;First, we need to create a single store with &lt;code class=&quot;highlighter-rouge&quot;&gt;reducers&lt;/code&gt;, then register a listener on the store. The listener will rerender whole application.&lt;/p&gt;
+
+&lt;div class=&quot;language-javascript highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;kd&quot;&gt;let&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;store&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;createStore&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;reducers&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;nx&quot;&gt;store&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;subscribe&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;render&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;When a user changes the selected city, we dispatch the payload, but via &lt;code class=&quot;highlighter-rouge&quot;&gt;store.dispatch()&lt;/code&gt; instead.&lt;/p&gt;
+
+&lt;div class=&quot;language-javascript highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nx&quot;&gt;store&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;dispatch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;({&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;actionType&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'city-update'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;selectedCity&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'paris'&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;});&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;This payload is digested by &lt;code class=&quot;highlighter-rouge&quot;&gt;CityReducer&lt;/code&gt;.&lt;/p&gt;
+
+&lt;div class=&quot;language-javascript highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;city&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;state&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{},&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;action&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;switch&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;action&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;type&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;case&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'city-update'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+      &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;object&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;assign&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;({},&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;state&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+        &lt;span class=&quot;na&quot;&gt;city&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;action&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;selectedCity&lt;/span&gt;
+      &lt;span class=&quot;p&quot;&gt;});&lt;/span&gt;
+    &lt;span class=&quot;nl&quot;&gt;default&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+      &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;state&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;When the user selects a country, we dispatch the payload.&lt;/p&gt;
+
+&lt;div class=&quot;language-javascript highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nx&quot;&gt;store&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;dispatch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;({&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;actionType&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'country-update'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;selectedCountry&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'australia'&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;});&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;This payload is &lt;strong&gt;ONLY&lt;/strong&gt; digested by &lt;code class=&quot;highlighter-rouge&quot;&gt;CountryReducer&lt;/code&gt;.&lt;/p&gt;
+
+&lt;div class=&quot;language-javascript highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;country&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;state&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{},&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;action&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;switch&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;action&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;type&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;case&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'country-update'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+      &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;object&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;assign&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;({},&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;state&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+        &lt;span class=&quot;na&quot;&gt;country&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;action&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;selectedCountry&lt;/span&gt;
+      &lt;span class=&quot;p&quot;&gt;});&lt;/span&gt;
+    &lt;span class=&quot;nl&quot;&gt;default&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+      &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;state&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;But how can we guarantee that select a country will trigger select a default city?&lt;/p&gt;
+
+&lt;div class=&quot;language-javascript highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nx&quot;&gt;componentWillReceiveProps&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;nextProps&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;c1&quot;&gt;// check whether there is new country selected&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;nextProps&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;country&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;!==&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;props&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;country&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;nx&quot;&gt;store&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;dispatch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;({&lt;/span&gt;
+      &lt;span class=&quot;na&quot;&gt;actionType&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'city-update'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+      &lt;span class=&quot;na&quot;&gt;selectedCity&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;getDefaultCityForCountry&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;nextProps&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;country&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;p&quot;&gt;});&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Obviously, we render our whole application two times instead of using &lt;code class=&quot;highlighter-rouge&quot;&gt;waitFor()&lt;/code&gt; in Flux to guarantee the order.&lt;/p&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;Let’s take a look at the steps in Redux approach.&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;should have CityReducer and CountryReducer to update state&lt;/li&gt;
+  &lt;li&gt;only need to register &lt;strong&gt;ONE&lt;/strong&gt; callback on the top level store to rerender&lt;/li&gt;
+  &lt;li&gt;no need to guarantee order, just &lt;strong&gt;RERENDER&lt;/strong&gt;&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h2 id=&quot;tips&quot;&gt;Tips&lt;/h2&gt;
+
+&lt;p&gt;You may noticed that we can also register the callbacks on the top level in Flux for updating Views.
+In this way, we have no need to guarantee the order, just rerender like how we did in Redux.&lt;/p&gt;
+
+&lt;p&gt;However, there is one thing different.&lt;/p&gt;
+
+&lt;div class=&quot;language-javascript highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nx&quot;&gt;CityStore&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;addChangeListener&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;render&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;nx&quot;&gt;CountryStore&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;addChangeListener&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;render&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+
+&lt;span class=&quot;c1&quot;&gt;// if there are other stores, we should also&lt;/span&gt;
+&lt;span class=&quot;c1&quot;&gt;// register the render callback on them.&lt;/span&gt;
+
+&lt;span class=&quot;c1&quot;&gt;// but in Redux, we only need to register one,&lt;/span&gt;
+&lt;span class=&quot;c1&quot;&gt;// since there is only one store holds one object.&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Got &lt;strong&gt;simplicity&lt;/strong&gt; of Redux now?&lt;/p&gt;</content><author><name></name></author><category term="js" /><category term="flux" /><category term="redux" /><summary type="html">Redux is very popular in recent two years, it seems like it has become the standard architecture in React application.</summary></entry><entry><title type="html">My first iOS app built with React Native</title><link href="https://just4fun.github.io/2016/03/30/my-first-ios-app-built-with-react-native/" rel="alternate" type="text/html" title="My first iOS app built with React Native" /><published>2016-03-30T00:00:00+00:00</published><updated>2016-03-30T00:00:00+00:00</updated><id>https://just4fun.github.io/2016/03/30/my-first-ios-app-built-with-react-native</id><content type="html" xml:base="https://just4fun.github.io/2016/03/30/my-first-ios-app-built-with-react-native/">&lt;p&gt;In the latter half of last year, after I created &lt;a href=&quot;http://just4fun.github.io/classics&quot;&gt;a simple books searching demo&lt;/a&gt; via React + Flux + Immutable.js (I also mentioned it in last two articles), I have really fallen in love with unidirectional data flow as also the amazing technology stack.&lt;/p&gt;
+
+&lt;!-- more --&gt;
+
+&lt;h2 id=&quot;motivation&quot;&gt;Motivation&lt;/h2&gt;
+
+&lt;p&gt;At that time, there is a Flux-liked architecture called &lt;code class=&quot;highlighter-rouge&quot;&gt;Redux&lt;/code&gt; appeared in my eyes, even more surprising was that it gained lots of fans and stars in a short time (there will be another separate article for Redux). I really wanna try it to build a cool stuff with any other framework.&lt;/p&gt;
+
+&lt;p&gt;I found there is no official app for &lt;a href=&quot;http://bbs.uestc.edu.cn/&quot;&gt;the BBS of my university&lt;/a&gt; (the BBS site is powerdy by Discuz!, and there is only app which converted from Discuz! site by &lt;a href=&quot;http://www.appbyme.com/&quot;&gt;appbyme&lt;/a&gt;), so why not build a customized app with React Native? There is almost no learning curve if you are familiar with React.&lt;/p&gt;
+
+&lt;h2 id=&quot;infrastructure&quot;&gt;Infrastructure&lt;/h2&gt;
+
+&lt;p&gt;When I started work on the basic infrastructure of the app, I had some troubles.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Some ES6/ES7 features can not be used (I stared with React Native 0.12.0)&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;http://facebook.github.io/react-native/docs/getting-started.html&quot;&gt;Official documents&lt;/a&gt; have no UI demostration for each component&lt;/li&gt;
+  &lt;li&gt;There is almost no React Native app on Github for reference in addition to some small demos&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;Anyway, the hardest part is actually in the beginning.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Bring Webpack and Babel in (&lt;em&gt;Unnecessary&lt;/em&gt;)&lt;/li&gt;
+  &lt;li&gt;Try each component in project to see the UI and behaviour (&lt;em&gt;Unnecessary&lt;/em&gt;)&lt;/li&gt;
+  &lt;li&gt;Why not become the reference on Github for other React Native developers? (&lt;em&gt;Cool&lt;/em&gt;)&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;With the basic development environment, I started work on BBS features after I read some &lt;a href=&quot;https://github.com/reactjs/redux/tree/master/examples&quot;&gt;examples&lt;/a&gt; of Redux.&lt;/p&gt;
+
+&lt;h2 id=&quot;development&quot;&gt;Development&lt;/h2&gt;
+
+&lt;p&gt;Facebook just provided basic components to developers, if you need some customized features or components, you must wrote your own by creating bridge between JavaScript and Objective C. Unfortunately, I’m not familiar with it.&lt;/p&gt;
+
+&lt;p&gt;Then I found there are already &lt;a href=&quot;http://www.gajotres.net/must-have-plugins-for-react-native/&quot;&gt;cool components&lt;/a&gt; in the community, most of them are still being built, so I chose some of them.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;a href=&quot;https://github.com/react-native-fellowship/react-native-side-menu&quot;&gt;react-native-side-menu&lt;/a&gt;: for basic layout&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://github.com/jsdf/react-native-refreshable-listview&quot;&gt;react-native-refreshable-listview&lt;/a&gt;: for refershable listview&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://github.com/oblador/react-native-vector-icons&quot;&gt;react-native-vector-icons&lt;/a&gt;: for icons in my project&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;There is really no learing curve for me, just need minimal changes.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Use tag &lt;code class=&quot;highlighter-rouge&quot;&gt;&amp;lt;View&amp;gt;&lt;/code&gt; instead of &lt;code class=&quot;highlighter-rouge&quot;&gt;&amp;lt;div&amp;gt;&lt;/code&gt;&lt;/li&gt;
+  &lt;li&gt;Use Flexbox-liked layout with JS instead of CSS&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&quot;best-practise&quot;&gt;Best practise&lt;/h2&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;If you use React Native &amp;lt; 0.16.0, add &lt;code class=&quot;highlighter-rouge&quot;&gt;.babelrc&lt;/code&gt; instead of Babel plugin in your root if you want to use more ES6/ES7 features
+    &lt;ul&gt;
+      &lt;li&gt;If you use React Native &amp;gt;= 0.16.0, you can not use &lt;code class=&quot;highlighter-rouge&quot;&gt;decorator&lt;/code&gt; of ES7 because of Babel 6 (refer &lt;a href=&quot;https://phabricator.babeljs.io/T2645&quot;&gt;here&lt;/a&gt;)&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+  &lt;li&gt;Refer &lt;a href=&quot;https://github.com/facebook/react-native/tree/master/Examples/UIExplorer&quot;&gt;UIExplorer&lt;/a&gt; example provided by React Native repo for component UI and funcationlities
+    &lt;ul&gt;
+      &lt;li&gt;It’s better to build this example on your device for consulting components usage everywhere&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+  &lt;li&gt;Change &lt;code class=&quot;highlighter-rouge&quot;&gt;Build Configuration&lt;/code&gt; from &lt;code class=&quot;highlighter-rouge&quot;&gt;Debug&lt;/code&gt; to &lt;code class=&quot;highlighter-rouge&quot;&gt;Release&lt;/code&gt; when using offline bundle, or the performance on your device will suffer greatly&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&quot;what-i-gain&quot;&gt;What I gain&lt;/h2&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;67 stars &amp;amp; 20 forks on Github (as of the article publish date)
+    &lt;ul&gt;
+      &lt;li&gt;This is my first Github repo which gained attention from other developers, they treated this project as tutorials for React Native or Redux, and even ask me for the BBS account. It encouraged me to add new features or refactor some existed code&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+  &lt;li&gt;Get more understanding in React
+    &lt;ul&gt;
+      &lt;li&gt;From React 0.14, it has been split into &lt;code class=&quot;highlighter-rouge&quot;&gt;react&lt;/code&gt; and &lt;code class=&quot;highlighter-rouge&quot;&gt;react-dom&lt;/code&gt; (refer &lt;a href=&quot;https://facebook.github.io/react/blog/2015/10/07/react-v0.14.html#two-packages-react-and-react-dom&quot;&gt;here&lt;/a&gt;), that said the essence of React Native is same with React, so that’s why I said “there is almost no learning curve if you are familiar with React”&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+  &lt;li&gt;Want to learn new skill
+    &lt;ul&gt;
+      &lt;li&gt;There is an &lt;a href=&quot;https://github.com/facebook/react-native/issues/5616&quot;&gt;issue&lt;/a&gt; in my project, it seems like an unsupported feature in React Native. If I get familiar with Objective C, maybe I could create a PR for React Native&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&quot;repository&quot;&gt;Repository&lt;/h2&gt;
+
+&lt;p&gt;https://github.com/just4fun/uestc-bbs-react-native&lt;/p&gt;
+
+&lt;h2 id=&quot;screenshot&quot;&gt;Screenshot&lt;/h2&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://cloud.githubusercontent.com/assets/7512625/13497473/54ac771a-e190-11e5-9a63-944ed8f836a1.gif&quot; alt=&quot;&quot; /&gt;&lt;/p&gt;</content><author><name></name></author><category term="js" /><category term="app" /><category term="react native" /><category term="facebook" /><summary type="html">In the latter half of last year, after I created a simple books searching demo via React + Flux + Immutable.js (I also mentioned it in last two articles), I have really fallen in love with unidirectional data flow as also the amazing technology stack.</summary></entry><entry><title type="html">Use immutable.js in React application</title><link href="https://just4fun.github.io/2015/07/18/use-immutable-js-in-react-application/" rel="alternate" type="text/html" title="Use immutable.js in React application" /><published>2015-07-18T00:00:00+00:00</published><updated>2015-07-18T00:00:00+00:00</updated><id>https://just4fun.github.io/2015/07/18/use-immutable-js-in-react-application</id><content type="html" xml:base="https://just4fun.github.io/2015/07/18/use-immutable-js-in-react-application/">&lt;p&gt;In &lt;a href=&quot;http://just4fun.github.io/hexo-blog/2015/05/12/flux-architecture/&quot;&gt;previous article&lt;/a&gt;, we got a general understanding about Flux architecture. And in &lt;a href=&quot;http://just4fun.github.io/hexo-blog/2015/05/12/flux-architecture/#Best_Practise&quot;&gt;Best Practise&lt;/a&gt; section, I have mentioned &lt;code class=&quot;highlighter-rouge&quot;&gt;Immutable data&lt;/code&gt; which I haven’t take a look yet. Now it’s time to dig into it.&lt;/p&gt;
+
+&lt;!-- more --&gt;
+
+&lt;h2 id=&quot;preliminaries&quot;&gt;Preliminaries&lt;/h2&gt;
+
+&lt;p&gt;If you have experience writing websites with React, you should know React makes use of a &lt;code class=&quot;highlighter-rouge&quot;&gt;virtual DOM&lt;/code&gt;, which is a descriptor of a DOM subtree rendered in the browser. It is important to understand that the result of render is not an actual DOM node. Those are just lightweight JavaScript objects. That’s virtual DOM.&lt;/p&gt;
+
+&lt;p&gt;When &lt;code class=&quot;highlighter-rouge&quot;&gt;setState&lt;/code&gt; is called, the component rebuilds the virtual DOM for its children. If you call &lt;code class=&quot;highlighter-rouge&quot;&gt;setState&lt;/code&gt; on the root element, then the entire React App is re-rendered. All the components, even if they didn’t change, will have their render method called. This may sound scary and inefficient but in practice, this works fine because we’re not touching the actual DOM.&lt;/p&gt;
+
+&lt;p&gt;DOM operations are very expensive because modifying the DOM will also apply and calculate CSS styles, layouts. The saved time from unnecessary DOM modification can be longer than the time spent diffing the virtual DOM. This is the secret of React’s virtual DOM.&lt;/p&gt;
+
+&lt;p&gt;However, the idea of re-rendering an entire subtree of components in response to every state change makes people wonder whether this process negatively impacts performance. That being said, if you want to get a considerable performance boost, you can minimize the number of costly DOM operations required to update the UI.&lt;/p&gt;
+
+&lt;h2 id=&quot;solution&quot;&gt;Solution&lt;/h2&gt;
+
+&lt;p&gt;React provides a component lifecycle function, &lt;code class=&quot;highlighter-rouge&quot;&gt;shouldComponentUpdate&lt;/code&gt;, which is triggered before the re-rendering process starts (virtual DOM comparison and possible eventual DOM reconciliation), giving the developer the ability to short circuit this process. The default implementation of this function returns &lt;code class=&quot;highlighter-rouge&quot;&gt;true&lt;/code&gt;, leaving React to perform the update.&lt;/p&gt;
+&lt;div class=&quot;language-javascript highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nx&quot;&gt;shouldComponentUpdate&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;nextProps&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;nextState&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;kc&quot;&gt;true&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;We could easily implement &lt;code class=&quot;highlighter-rouge&quot;&gt;shouldComponentUpdate&lt;/code&gt; for simple props/state structures like bellow:&lt;/p&gt;
+&lt;div class=&quot;language-javascript highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nx&quot;&gt;shouldComponentUpdate&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;nextProps&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;nextState&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;props&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;value&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;!==&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;nextProps&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;value&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; 
+      &lt;span class=&quot;o&quot;&gt;||&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;state&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;value&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;!==&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;nextState&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;value&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;We could even generalize an implementation based on shallow equality (cause React will invoke this function pretty &lt;strong&gt;OFTEN&lt;/strong&gt;, so the implementation has to be &lt;strong&gt;FAST&lt;/strong&gt;) and mix it into components. In fact, React already provides such implementation: &lt;a href=&quot;https://facebook.github.io/react/docs/pure-render-mixin.html&quot;&gt;PureRenderMixin&lt;/a&gt;.&lt;/p&gt;
+
+&lt;h2 id=&quot;issue&quot;&gt;Issue&lt;/h2&gt;
+
+&lt;p&gt;So far so good. 
+Unfortunately, there may be two issues if we bring &lt;code class=&quot;highlighter-rouge&quot;&gt;PureRenderMixin&lt;/code&gt; into our App directly.&lt;/p&gt;
+
+&lt;hr /&gt;
+&lt;blockquote&gt;
+  &lt;p&gt;&lt;em&gt;Manage object references carelessly&lt;/em&gt;&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;I pushed some commits into the demo App mentioned in previous article. One of the commits is adding a functionality &lt;code class=&quot;highlighter-rouge&quot;&gt;Like&lt;/code&gt;, you can click heart icon to like a book. See code &lt;a href=&quot;https://github.com/just4fun/classics/commit/c010dc4cbacc021c45594720955a73664b28deec&quot;&gt;here&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://user-images.githubusercontent.com/7512625/28053738-97f42330-6644-11e7-9ea6-40b53b349aae.jpg&quot; alt=&quot;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;In addition, I added &lt;code class=&quot;highlighter-rouge&quot;&gt;debug&lt;/code&gt; module to track which components will be re-render. See code &lt;a href=&quot;https://github.com/just4fun/classics/commit/f2915ad12d644f8691ab6ee309b7e8ceb1c9aedf&quot;&gt;here&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;Now I search some books via entering keyword.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://user-images.githubusercontent.com/7512625/28053741-986e5eb6-6644-11e7-9302-06df2deffee3.jpg&quot; alt=&quot;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Then I want to like the first book, so I click the heart icon.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://user-images.githubusercontent.com/7512625/28053740-9834ca8e-6644-11e7-8f45-eec6567df6be.jpg&quot; alt=&quot;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;As you see, all the book items are re-rendered. Since we want to squeeze out performance, then I bring &lt;code class=&quot;highlighter-rouge&quot;&gt;PreRenderMixin&lt;/code&gt;. See code &lt;a href=&quot;https://github.com/just4fun/classics/commit/6ff882cd9c4913d92d9c4b7dbfc5e447f1df598e&quot;&gt;here&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;Unfortunately, &lt;strong&gt;NOTHING&lt;/strong&gt; happen, neither the like icon nor the Chrome console.&lt;/p&gt;
+
+&lt;p&gt;The problem is that since the parent and inner components share a reference to the same object &lt;code class=&quot;highlighter-rouge&quot;&gt;book&lt;/code&gt;, when the object gets mutated on onClick function, the prop the inner component had will change. So, when the re-rendering process starts, and &lt;code class=&quot;highlighter-rouge&quot;&gt;shouldComponentUpdate&lt;/code&gt; gets invoked, &lt;code class=&quot;highlighter-rouge&quot;&gt;this.props.book&lt;/code&gt; will be equal to &lt;code class=&quot;highlighter-rouge&quot;&gt;nextProps.value.book&lt;/code&gt;, because in fact, they reference the same object.&lt;/p&gt;
+&lt;div class=&quot;language-javascript highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;BookItem&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;React&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;createClass&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;({&lt;/span&gt;
+  
+  &lt;span class=&quot;na&quot;&gt;mixins&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;PureRenderMixin&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;],&lt;/span&gt;
+  
+  &lt;span class=&quot;na&quot;&gt;render&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;book&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;props&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;book&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+    &lt;span class=&quot;c1&quot;&gt;// ...&lt;/span&gt;
+    &lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;like_status&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'glyphicon glyphicon-heart'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;book&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;isLike&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+      &lt;span class=&quot;nx&quot;&gt;like_status&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+=&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;' like'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+    &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+
+    &lt;span class=&quot;nx&quot;&gt;debug&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'render &amp;lt;BookItem /&amp;gt;'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;book&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;title&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;
+      &lt;span class=&quot;o&quot;&gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;div&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;className&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'main-section__book'&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt;
+        &lt;span class=&quot;c1&quot;&gt;// ...&lt;/span&gt;
+        &lt;span class=&quot;o&quot;&gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;div&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;className&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'main-section__book-action'&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt;
+          &lt;span class=&quot;o&quot;&gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;span&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;className&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;like_status&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;onClick&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;_onClick&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;bind&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;book&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)}&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;sr&quot;&gt;/span&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;&amp;gt;
+&lt;/span&gt;        &lt;span class=&quot;o&quot;&gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;sr&quot;&gt;/div&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;&amp;gt;
+&lt;/span&gt;      &lt;span class=&quot;o&quot;&gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;sr&quot;&gt;/div&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;&amp;gt;
+&lt;/span&gt;    &lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;},&lt;/span&gt;
+  
+  &lt;span class=&quot;na&quot;&gt;_onClick&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;book&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;nx&quot;&gt;BookGetActions&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;like&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;book&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// the `book` share the same reference with `this.props.book`&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+
+&lt;span class=&quot;p&quot;&gt;});&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;To solve this issue, first of all, we should clone another book object to prevent the same reference sharing.&lt;/p&gt;
+&lt;div class=&quot;language-javascript highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nx&quot;&gt;_onClick&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;book&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;nx&quot;&gt;BookGetActions&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;like&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;JSON&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;parse&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;JSON&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;stringify&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;book&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)));&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// a simple way to clone&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Then we should find the specific book in book list which is stored in &lt;code class=&quot;highlighter-rouge&quot;&gt;BookStore&lt;/code&gt;, and replace it with the clone one. Code is omitted.&lt;/p&gt;
+
+&lt;p&gt;Everything seems OK. However, it may bring another issue.&lt;/p&gt;
+
+&lt;hr /&gt;
+&lt;blockquote&gt;
+  &lt;p&gt;&lt;em&gt;complex data structures&lt;/em&gt;&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;As &lt;a href=&quot;https://facebook.github.io/react/docs/pure-render-mixin.html&quot;&gt;React doc&lt;/a&gt; mentioned, &lt;code class=&quot;highlighter-rouge&quot;&gt;PureRenderMixin&lt;/code&gt; only &lt;strong&gt;SHALLOWLY&lt;/strong&gt; compares the objects. If these contain complex data structures, it may produce false-negatives for deeper differences, which will cause re-render even everything between two objects are same.&lt;/p&gt;
+
+&lt;h2 id=&quot;real-solution&quot;&gt;Real solution&lt;/h2&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://github.com/facebook/immutable-js&quot;&gt;Immutable-js&lt;/a&gt; is a JavaScript collections library which provides immutable persistent collections. Immutability makes tracking changes cheap; a change will always result in a new object so we &lt;strong&gt;ONLY&lt;/strong&gt; need to check if the reference to the object has changed.&lt;/p&gt;
+
+&lt;p&gt;Immutable data structures provides you a cheap and less verbose way to track changes on objects, which is all we need to implement &lt;code class=&quot;highlighter-rouge&quot;&gt;shouldComponentUpdate&lt;/code&gt;. Therefore, if we model props and state attributes using the abstractions provided by immutable-js we’ll be able to use &lt;code class=&quot;highlighter-rouge&quot;&gt;PureRenderMixin&lt;/code&gt; and get a nice boost in perf. See code &lt;a href=&quot;https://github.com/just4fun/classics/commit/ce3474f2b6d40a6a5c6e1e1b3d56681f5ca2b95f&quot;&gt;here&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;Run our App again, and like the first book, then check the Chrome console.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://user-images.githubusercontent.com/7512625/28053739-98231c44-6644-11e7-90a5-f9422ba9ce0c.jpg&quot; alt=&quot;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;As we expected, only the liked book has been re-rendered. That’s what Immutable-js do for us.&lt;/p&gt;
+
+&lt;h2 id=&quot;references&quot;&gt;References&lt;/h2&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;https://facebook.github.io/react/docs/advanced-performance.html&lt;/li&gt;
+  &lt;li&gt;https://facebook.github.io/react/docs/pure-render-mixin.html&lt;/li&gt;
+  &lt;li&gt;http://calendar.perfplanet.com/2013/diff/&lt;/li&gt;
+&lt;/ul&gt;</content><author><name></name></author><category term="immutable" /><category term="flux" /><summary type="html">In previous article, we got a general understanding about Flux architecture. And in Best Practise section, I have mentioned Immutable data which I haven't take a look yet. Now it's time to dig into it.</summary></entry><entry><title type="html">Flux architecture</title><link href="https://just4fun.github.io/2015/05/12/flux-architecture/" rel="alternate" type="text/html" title="Flux architecture" /><published>2015-05-12T00:00:00+00:00</published><updated>2015-05-12T00:00:00+00:00</updated><id>https://just4fun.github.io/2015/05/12/flux-architecture</id><content type="html" xml:base="https://just4fun.github.io/2015/05/12/flux-architecture/">&lt;p&gt;At the end of last year, there are two interesting stuff produced by Facebook came into fashion. One is &lt;a href=&quot;http://facebook.github.io/react/&quot;&gt;React&lt;/a&gt;, another is &lt;a href=&quot;http://facebook.github.io/flux/&quot;&gt;Flux&lt;/a&gt;.&lt;/p&gt;
+
+&lt;!-- more --&gt;
+
+&lt;p&gt;Let’s have a detailed overview about Flux.&lt;/p&gt;
+
+&lt;h2 id=&quot;overview&quot;&gt;Overview&lt;/h2&gt;
+
+&lt;p&gt;An application architecture that complements React’s compassable view components by utilising &lt;strong&gt;unidirectional&lt;/strong&gt; data flow.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://user-images.githubusercontent.com/7512625/28053535-85aff402-6643-11e7-877b-fce8e922ccc9.png&quot; alt=&quot;unidirectional work flow&quot; /&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;main-components&quot;&gt;Main Components&lt;/h2&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Dispatcher
+    &lt;ul&gt;
+      &lt;li&gt;&lt;strong&gt;central hub&lt;/strong&gt;, manages all data flow in application&lt;/li&gt;
+      &lt;li&gt;distribute the &lt;strong&gt;Actions&lt;/strong&gt; to the &lt;strong&gt;Stores&lt;/strong&gt;&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+  &lt;li&gt;Action
+    &lt;ul&gt;
+      &lt;li&gt;send an object (aka &lt;strong&gt;payload&lt;/strong&gt;) contains &lt;strong&gt;type&lt;/strong&gt; and &lt;strong&gt;data&lt;/strong&gt; to dispatcher&lt;/li&gt;
+      &lt;li&gt;do not contain knowledge about how to update the stores&lt;/li&gt;
+      &lt;li&gt;invoke from event handlers of &lt;strong&gt;views&lt;/strong&gt; or &lt;strong&gt;server&lt;/strong&gt;&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+  &lt;li&gt;Store
+    &lt;ul&gt;
+      &lt;li&gt;contain application &lt;strong&gt;state&lt;/strong&gt; and &lt;strong&gt;logic&lt;/strong&gt;&lt;/li&gt;
+      &lt;li&gt;register itself with the dispatcher and provide it with a callback&lt;/li&gt;
+      &lt;li&gt;broadcast an event to notify the views to update&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+  &lt;li&gt;View (Controller-View)
+    &lt;ul&gt;
+      &lt;li&gt;get data from the stores&lt;/li&gt;
+      &lt;li&gt;render and pass data down to its descendants&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://user-images.githubusercontent.com/7512625/28053570-b5d242ca-6643-11e7-9010-43825cf305c4.png&quot; alt=&quot;Flux main components&quot; /&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;compare-with-mvc&quot;&gt;Compare with MVC&lt;/h2&gt;
+
+&lt;p&gt;In my opinion, I’m not in favor of camparing Flux with MVC.&lt;/p&gt;
+
+&lt;p&gt;Flux is an architecture which help React to build client-side application. With Flux, React can be used more easily.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;store application &lt;strong&gt;state&lt;/strong&gt; in Store, like Ember-data&lt;/li&gt;
+  &lt;li&gt;easy to &lt;strong&gt;communicate&lt;/strong&gt; between React components&lt;/li&gt;
+  &lt;li&gt;unidirectional data flow is more &lt;strong&gt;predictable&lt;/strong&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;However, if you want to use Flux &lt;strong&gt;independently&lt;/strong&gt; without React, that maybe a little difficult. The unidirectional data flow is dependant on the core concept of React: &lt;strong&gt;Virtual DOM&lt;/strong&gt;. Once user triggers an event from view, the flow cycle starts. When it reachs Store, it will emit an event to notify View to re-render, which is based on Virtual DOM. Therefore, you should implement a set of things which React already prepare for you.&lt;/p&gt;
+
+&lt;p&gt;As for MVC, it’s also an architectural pattern, but it’s more common. One of the disadvantages about Flux is that it’s a little hard to migrate current architecture to Flux. Imagine that you have an application with one MV* framework, such as Angular or Ember. If you want to use Flux, maybe you should rebuild your whole application. It’s no need to do the migration indeed.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://user-images.githubusercontent.com/7512625/28053627-0cc0aa9a-6644-11e7-9fd1-4e2fe5ecfc66.png&quot; alt=&quot;MVC work flow&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;What is more, I think we should compare Flux with &lt;strong&gt;MVVM&lt;/strong&gt;, not MVC, because some frameworks like Backbone just implement MVC but has no data-binding, and the data-binding is the biggest difference from unidirectional data flow. So in my opinoin, it’s boring to compare pure MVC with Flux.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;https://user-images.githubusercontent.com/7512625/28053588-d64cd29a-6643-11e7-9cd1-242ff919f708.png&quot; alt=&quot;MVVM work flow&quot; /&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;best-practise&quot;&gt;Best Practise&lt;/h2&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;ajax calls should come from Action&lt;/li&gt;
+  &lt;li&gt;distinguish between view triggered actions and server/API triggered actions&lt;/li&gt;
+  &lt;li&gt;distinguish between &lt;strong&gt;stateful&lt;/strong&gt; Controller-Views and &lt;strong&gt;stateless&lt;/strong&gt; Views&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Immutable&lt;/strong&gt; data (See my another &lt;a href=&quot;http://just4fun.github.io/hexo-blog/2015/07/18/use-immutable-js-in-react-application/&quot;&gt;post&lt;/a&gt;)&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&quot;demo&quot;&gt;Demo&lt;/h2&gt;
+
+&lt;p&gt;I have wrote a simple demo which used React and Flux.
+Just for fun.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Repo: https://github.com/just4fun/classics/tree/master/repos/react_flux&lt;/li&gt;
+  &lt;li&gt;Live Demo: http://just4fun.github.io/classics&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&quot;references&quot;&gt;References&lt;/h2&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;https://facebook.github.io/flux/docs/overview.html&lt;/li&gt;
+  &lt;li&gt;http://fluxxor.com/what-is-flux.html&lt;/li&gt;
+  &lt;li&gt;https://scotch.io/tutorials/getting-to-know-flux-the-react-js-architecture&lt;/li&gt;
+  &lt;li&gt;http://racingtadpole.com/blog/flux-react-best-practices/&lt;/li&gt;
+&lt;/ul&gt;</content><author><name></name></author><category term="facebook" /><category term="flux" /><category term="js" /><summary type="html">At the end of last year, there are two interesting stuff produced by Facebook came into fashion. One is React, another is Flux.</summary></entry><entry><title type="html">What the hell is F2E</title><link href="https://just4fun.github.io/2015/04/29/what-the-hell-is-f2e/" rel="alternate" type="text/html" title="What the hell is F2E" /><published>2015-04-29T00:00:00+00:00</published><updated>2015-04-29T00:00:00+00:00</updated><id>https://just4fun.github.io/2015/04/29/what-the-hell-is-f2e</id><content type="html" xml:base="https://just4fun.github.io/2015/04/29/what-the-hell-is-f2e/">&lt;p&gt;As a F2E (Front End Engineer), there is a big headache that how should I explain to others what is F2E or what F2E do.&lt;/p&gt;
+
+&lt;!-- more --&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;In general, many people consider F2E the similar role like UI/UX, they also think F2E should belong to the Design Department, not the Develop Department. In their opinions, the biggest task for F2E is transform &lt;code class=&quot;highlighter-rouge&quot;&gt;.psd&lt;/code&gt; file which produced by UI/UX to &lt;code class=&quot;highlighter-rouge&quot;&gt;.html&lt;/code&gt; file, and our weapons are only html and css. A little javascript at most.&lt;/p&gt;
+
+&lt;p&gt;For instance, below is conversation between I and some guys in other departments when I decided to resign from my previous company.&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;– Where will you go?
+– Somewhere I can do the interesting things about front end.
+– So you’re the F2E here!
+– But what I did is just a small part of front end.
+– So…what F2E should do?
+– Ummm…&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;At that time, I always don’t know how to explain. Of course I won’t tell them such as MVC/MVVM or modularization.&lt;/p&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;Even for some F2Es, they also think the main task is build web pages with html5 and css3. As for javascript, it is just used for form validation, ajax, or building sliders.&lt;/p&gt;
+
+&lt;p&gt;Today, there are still many companys only use jQuery in their projects. They use JSP or ASP.NET to render page, then use jQuery to do some UI changes. All the javascript code are in the global namespace, even in tempaltes. In addition, if they want to upgrade jQuery, they should download it from jQuery official site, and then put it into repo.&lt;/p&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;So, what the hell is F2E?&lt;/p&gt;
+
+&lt;p&gt;When decide to build a web application(context of use aside), from F2E’s perspective, we could do as below.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;use RequireJS/Browserify/Webpack for modularization.&lt;/li&gt;
+  &lt;li&gt;use npm/bower for version control of libraries.&lt;/li&gt;
+  &lt;li&gt;use Grunt/Gulp for building automating tasks.&lt;/li&gt;
+  &lt;li&gt;select appropriate framework/libraries&lt;/li&gt;
+  &lt;li&gt;abstract reusable components&lt;/li&gt;
+  &lt;li&gt;write integration/unit tests&lt;/li&gt;
+  &lt;li&gt;optimize performance&lt;/li&gt;
+  &lt;li&gt;ensure compatibility&lt;/li&gt;
+  &lt;li&gt;etc.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;We can move most logics from backend to front end based on these advanced tools and modern browsers, and backend can only focus on APIs.&lt;/p&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;Nowadays, you can write any application with javascript, not only web application. You can write backend with Node, build desktop application with node-webkit, even build native app with react-native.&lt;/p&gt;
+
+&lt;p&gt;Are you ready to write javascript?&lt;/p&gt;</content><author><name></name></author><category term="f2e" /><summary type="html">As a F2E (Front End Engineer), there is a big headache that how should I explain to others what is F2E or what F2E do.</summary></entry><entry><title type="html">Some basic Git commands</title><link href="https://just4fun.github.io/2015/02/13/some-basic-git-commands/" rel="alternate" type="text/html" title="Some basic Git commands" /><published>2015-02-13T00:00:00+00:00</published><updated>2015-02-13T00:00:00+00:00</updated><id>https://just4fun.github.io/2015/02/13/some-basic-git-commands</id><content type="html" xml:base="https://just4fun.github.io/2015/02/13/some-basic-git-commands/">&lt;p&gt;Record some basic Git commands here for later reference.&lt;/p&gt;
+
+&lt;!-- more --&gt;
+
+&lt;h3 id=&quot;stashing&quot;&gt;Stashing&lt;/h3&gt;
+
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;git stash                         &lt;span class=&quot;c&quot;&gt;# stash half-done code into stack except untracked files&lt;/span&gt;
+&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;git stash &lt;span class=&quot;nt&quot;&gt;-u&lt;/span&gt;                      &lt;span class=&quot;c&quot;&gt;# stash any changed files&lt;/span&gt;
+&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;git stash &lt;span class=&quot;nt&quot;&gt;-p&lt;/span&gt;                      &lt;span class=&quot;c&quot;&gt;# prompt which of changes you would like to stash&lt;/span&gt;
+&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;git stash branch new_branch_name  &lt;span class=&quot;c&quot;&gt;# create new branch with stash and drop it from stack&lt;/span&gt;
+
+&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;git stash list                    &lt;span class=&quot;c&quot;&gt;# list stored stashes&lt;/span&gt;
+
+&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;git stash apply                   &lt;span class=&quot;c&quot;&gt;# apply stored stash but the file you staged before wasn’t restaged&lt;/span&gt;
+&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;git stash apply &lt;span class=&quot;nt&quot;&gt;--index&lt;/span&gt;           &lt;span class=&quot;c&quot;&gt;# apply stored stash and reapply the staged changes&lt;/span&gt;
+&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;git stash pop                     &lt;span class=&quot;c&quot;&gt;# apply stored stash and drop it from stack immediately&lt;/span&gt;
+
+&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;git stash drop                    &lt;span class=&quot;c&quot;&gt;# drop stash from stack&lt;/span&gt;
+&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;git stash clear                   &lt;span class=&quot;c&quot;&gt;# clear all stashes from stack&lt;/span&gt;
+
+&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;git revert HEAD                   &lt;span class=&quot;c&quot;&gt;# record a new commit to revert last commit&lt;/span&gt;
+&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;git revert &amp;lt;commit&amp;gt;               &lt;span class=&quot;c&quot;&gt;# record a new commit to revert specific commit&lt;/span&gt;
+&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;git cherry-pick &amp;lt;commit&amp;gt;          &lt;span class=&quot;c&quot;&gt;# reverse to `git revert`, record a new commit to apply specific commit change&lt;/span&gt;
+
+&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;git reset &lt;span class=&quot;nt&quot;&gt;--soft&lt;/span&gt; &amp;lt;commit&amp;gt;         &lt;span class=&quot;c&quot;&gt;# reset to specific commit and keep the changes in index&lt;/span&gt;
+&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;git reset &lt;span class=&quot;nt&quot;&gt;--hard&lt;/span&gt; &amp;lt;commit&amp;gt;         &lt;span class=&quot;c&quot;&gt;# reset to specific commit and discard the changes&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;</content><author><name></name></author><category term="git" /><summary type="html">Record some basic Git commands here for later reference.</summary></entry><entry><title type="html">How router of Single Page Application works</title><link href="https://just4fun.github.io/2015/02/08/how-router-of-single-page-application-works/" rel="alternate" type="text/html" title="How router of Single Page Application works" /><published>2015-02-08T00:00:00+00:00</published><updated>2015-02-08T00:00:00+00:00</updated><id>https://just4fun.github.io/2015/02/08/how-router-of-single-page-application-works</id><content type="html" xml:base="https://just4fun.github.io/2015/02/08/how-router-of-single-page-application-works/">&lt;p&gt;In some javascript frameworks (&lt;a href=&quot;http://backbonejs.org/&quot;&gt;Backbone&lt;/a&gt;, &lt;a href=&quot;http://emberjs.com/&quot;&gt;Ember&lt;/a&gt;, &lt;a href=&quot;https://angularjs.org/&quot;&gt;Angular&lt;/a&gt;, etc.), there is &lt;code class=&quot;highlighter-rouge&quot;&gt;Router&lt;/code&gt;, which provide us ability to manage states in our applications.&lt;/p&gt;
+
+&lt;!-- more --&gt;
+
+&lt;p&gt;Generally, there are two ways to manage url. One is &lt;strong&gt;hash&lt;/strong&gt;, which relies upon the &lt;code class=&quot;highlighter-rouge&quot;&gt;hashchange&lt;/code&gt; event existing in the browser. The other is &lt;strong&gt;history&lt;/strong&gt;, which relies upon the browser’s &lt;code class=&quot;highlighter-rouge&quot;&gt;history&lt;/code&gt; API.&lt;/p&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;To bootstrap router, we should have some config first.&lt;/p&gt;
+
+&lt;p&gt;In Backbone,&lt;/p&gt;
+
+&lt;div class=&quot;language-javascript highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c1&quot;&gt;// use hash fragment&lt;/span&gt;
+&lt;span class=&quot;nx&quot;&gt;Backbone&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;history&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;start&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;();&lt;/span&gt;
+&lt;span class=&quot;c1&quot;&gt;// use History API&lt;/span&gt;
+&lt;span class=&quot;nx&quot;&gt;Backbone&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;history&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;start&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;({&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;pushState&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;kc&quot;&gt;true&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;})&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;In Ember,&lt;/p&gt;
+&lt;div class=&quot;language-javascript highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c1&quot;&gt;// use hash fragment&lt;/span&gt;
+&lt;span class=&quot;nx&quot;&gt;App&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;Router&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;reopen&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;({&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;location&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'hash'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;});&lt;/span&gt;
+&lt;span class=&quot;c1&quot;&gt;// use History API&lt;/span&gt;
+&lt;span class=&quot;nx&quot;&gt;App&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;Router&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;reopen&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;({&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;location&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'history'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;});&lt;/span&gt;
+&lt;span class=&quot;c1&quot;&gt;// automatic detection&lt;/span&gt;
+&lt;span class=&quot;nx&quot;&gt;App&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;Router&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;reopen&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;({&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;location&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'auto'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;});&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;In Angular,&lt;/p&gt;
+&lt;div class=&quot;language-javascript highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c1&quot;&gt;// use hash fragment&lt;/span&gt;
+&lt;span class=&quot;nx&quot;&gt;$locationProvider&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;html5Mode&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kc&quot;&gt;false&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;c1&quot;&gt;// use History API&lt;/span&gt;
+&lt;span class=&quot;nx&quot;&gt;$locationProvider&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;html5Mode&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kc&quot;&gt;true&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;As we know, when we use &lt;code class=&quot;highlighter-rouge&quot;&gt;hash&lt;/code&gt;, the url behind &lt;code class=&quot;highlighter-rouge&quot;&gt;#&lt;/code&gt; will not be sent to server. So we can simply add &lt;code class=&quot;highlighter-rouge&quot;&gt;hashchange&lt;/code&gt; event to listen url change (in essence, it’s hash change).&lt;/p&gt;
+&lt;div class=&quot;language-javascript highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nb&quot;&gt;window&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;onhashchange&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;location&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;hash&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'#about'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;c1&quot;&gt;// do stuff here&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;These frameworks have already wraped this default configuration for us, we just follow their own router way to config.&lt;/p&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;But for &lt;code class=&quot;highlighter-rouge&quot;&gt;history&lt;/code&gt;, how it works? It relies upon &lt;code class=&quot;highlighter-rouge&quot;&gt;pushState&lt;/code&gt; and &lt;code class=&quot;highlighter-rouge&quot;&gt;replaceState&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;When we click &lt;code class=&quot;highlighter-rouge&quot;&gt;&amp;lt;a&amp;gt;&lt;/code&gt; tag to another link, we should do some works,&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;prevent default behaviour&lt;/li&gt;
+  &lt;li&gt;get the url which we want to link to&lt;/li&gt;
+  &lt;li&gt;use pushState or replaceState to change the url without any refresh&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;For Ember and Angular, this is built-in support. So we should implement this by ourself in Backbone application.&lt;/p&gt;
+&lt;div class=&quot;language-javascript highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nx&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;document&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;).&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;on&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&quot;a&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;click&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;e&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;href&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;).&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;attr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&quot;href&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+  &lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;protocol&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;protocol&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;//&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+ 
+  &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;href&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;slice&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;protocol&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;length&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;!==&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;protocol&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;nx&quot;&gt;e&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;preventDefault&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;();&lt;/span&gt;
+    &lt;span class=&quot;nx&quot;&gt;Backbone&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;history&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;navigate&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;href&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;kc&quot;&gt;true&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;});&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;One thing to &lt;strong&gt;NOTE&lt;/strong&gt; is that, if we use &lt;code class=&quot;highlighter-rouge&quot;&gt;history&lt;/code&gt; API, it’s must be supported in our server side. Otherwise, we will get 404 page when we refresh.&lt;/p&gt;</content><author><name></name></author><category term="spa" /><category term="router" /><category term="pushstate" /><category term="js" /><summary type="html">In some javascript frameworks (Backbone, Ember, Angular, etc.), there is Router, which provide us ability to manage states in our applications.</summary></entry></feed>
