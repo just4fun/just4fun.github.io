@@ -1,0 +1,56 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches:
+      - src
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+
+    steps:
+    - name: Checkout source branch
+      uses: actions/checkout@v4
+      with:
+        ref: src
+
+    - name: Set up Ruby
+      uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: '3.0'
+        bundler-cache: true
+
+    - name: Install dependencies
+      run: bundle install
+
+    - name: Build Jekyll site
+      run: bundle exec jekyll build
+
+    - name: Deploy to master branch
+      run: |
+        # Configure git
+        git config --global user.name "just4fun.ci"
+        git config --global user.email "ci@just4.fun"
+
+        # Create a temporary directory for deployment
+        DEPLOY_PATH="deploy_temp"
+        rm -rf $DEPLOY_PATH
+        git init $DEPLOY_PATH
+
+        # Copy built site to deployment directory
+        cp -r _site/. $DEPLOY_PATH/
+        cp README.md $DEPLOY_PATH/
+
+        # Deploy to master branch
+        cd $DEPLOY_PATH
+        git add --all
+        git commit -m "Site updated via GitHub Actions on $(date +"%Y-%m-%d %H:%M:%S")"
+        git push --force https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:master
+
+        echo "Deployment completed successfully!"
