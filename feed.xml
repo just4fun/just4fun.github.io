@@ -1,0 +1,1148 @@
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="4.4.1">Jekyll</generator><link href="https://just4fun.github.io/feed.xml" rel="self" type="application/atom+xml" /><link href="https://just4fun.github.io/" rel="alternate" type="text/html" /><updated>2025-12-21T08:37:12+00:00</updated><id>https://just4fun.github.io/feed.xml</id><title type="html">just4fun</title><subtitle>Zoro&apos;s personal blog.</subtitle><entry><title type="html">Rethink event loop</title><link href="https://just4fun.github.io/2018/03/15/rethink-event-loop/" rel="alternate" type="text/html" title="Rethink event loop" /><published>2018-03-15T00:00:00+00:00</published><updated>2018-03-15T00:00:00+00:00</updated><id>https://just4fun.github.io/2018/03/15/rethink-event-loop</id><content type="html" xml:base="https://just4fun.github.io/2018/03/15/rethink-event-loop/"><![CDATA[<h2 id="background">Background</h2>
+
+<p>I have been working on JavaScript development for several years, the <code class="language-plaintext highlighter-rouge">event loop</code>, the basic but also abstract concept, I think I know it well after I went through Philip Roberts’s great talk on JSConf EU 2014.</p>
+
+<iframe width="560" height="315" src="https://www.youtube.com/embed/8aGhZQkoFbQ?rel=0" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen=""></iframe>
+
+<p>However, when I was reading <a href="https://github.com/getify/You-Dont-Know-JS">You don’t know JavaScript</a>, I noticed there is <a href="https://github.com/getify/You-Dont-Know-JS/blob/master/async%20%26%20performance/ch1.md#jobs">Job queue</a>, it is similar to <code class="language-plaintext highlighter-rouge">task queue</code>, but the <code class="language-plaintext highlighter-rouge">jobs</code> will be executed after each <code class="language-plaintext highlighter-rouge">task</code>. What? Then I googled it, but more strange words entered my sight. <code class="language-plaintext highlighter-rouge">macrotask</code>, <code class="language-plaintext highlighter-rouge">microtask</code>. Ha? Maybe I don’t understand event loop.</p>
+
+<h2 id="rethinking">Rethinking</h2>
+
+<p><img src="https://user-images.githubusercontent.com/7512625/37471158-121bc6b4-28a4-11e8-8fce-181823d8de88.png" alt="event-loop" /></p>
+
+<center><figcaption>Diagram from Philip Roberts's talk</figcaption></center>
+
+<p>In Philip’s great talk, he demonstrated how the asynchronous callbacks (like setTimeout, I/O) been scheduled to the <code class="language-plaintext highlighter-rouge">callback queue</code> (aka <code class="language-plaintext highlighter-rouge">task queue</code>), but one thing was missed. <code class="language-plaintext highlighter-rouge">microtask</code>.</p>
+
+<hr />
+
+<p>According to <a href="https://html.spec.whatwg.org/multipage/webappapis.html#event-loops">whatwg#webappapis#event-loops</a>,</p>
+
+<ul>
+  <li>Event loop is used to coordinate events, user interaction, scripts, rendering, networking, and so forth</li>
+  <li>There are two kinds of event loops: those for <code class="language-plaintext highlighter-rouge">browsing contexts</code>, and those for <code class="language-plaintext highlighter-rouge">workers</code></li>
+  <li>An event loop has one or more <code class="language-plaintext highlighter-rouge">task queues</code></li>
+  <li><strong>Each</strong> event loop has a <code class="language-plaintext highlighter-rouge">microtask queue</code></li>
+  <li>If the JavaScript execution context stack is now empty, perform a microtask checkpoint</li>
+</ul>
+
+<p>According to <a href="https://html.spec.whatwg.org/multipage/webappapis.html#integration-with-the-javascript-job-queue">whatwg#webappapis#integration-with-the-javascript-job-queue</a>,</p>
+
+<ul>
+  <li>The JavaScript specification defines the JavaScript job and job queue abstractions in order to specify certain invariants about how <code class="language-plaintext highlighter-rouge">promise</code> operations execute with a clean JavaScript execution context stack and in a certain order</li>
+  <li>When the JavaScript specification says to call the EnqueueJob abstract operation … Queue a <code class="language-plaintext highlighter-rouge">microtask</code></li>
+</ul>
+
+<p>According to <a href="http://ecma-international.org/ecma-262/6.0/index.html#sec-jobs-and-job-queues">ecma-262#sec-jobs-and-job-queues</a>,</p>
+
+<ul>
+  <li>Execution of a <code class="language-plaintext highlighter-rouge">Job</code> can be initiated only when there is no running <code class="language-plaintext highlighter-rouge">execution context</code> and the <code class="language-plaintext highlighter-rouge">execution context stack</code> is empty</li>
+</ul>
+
+<p>According to <a href="https://github.com/getify/You-Dont-Know-JS/blob/master/async%20%26%20performance/ch1.md#event-loop">You don’t know JavaScript#Event Loop</a>,</p>
+
+<ul>
+  <li>Each iteration of this loop is called a <code class="language-plaintext highlighter-rouge">tick</code>. For each tick, if an event is waiting on the queue, it’s taken off and executed. These events are your function callbacks</li>
+</ul>
+
+<h2 id="practise">Practise</h2>
+
+<p>Let’s say we have such code snippet.</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nf">setTimeout</span><span class="p">(</span><span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+  <span class="nx">console</span><span class="p">.</span><span class="nf">log</span><span class="p">(</span><span class="dl">'</span><span class="s1">A</span><span class="dl">'</span><span class="p">);</span>
+<span class="p">},</span> <span class="mi">0</span><span class="p">);</span>
+
+<span class="k">new</span> <span class="nc">Promise</span><span class="p">(</span><span class="kd">function</span> <span class="nf">executor</span><span class="p">(</span><span class="nx">resolve</span><span class="p">)</span> <span class="p">{</span>
+  <span class="nx">console</span><span class="p">.</span><span class="nf">log</span><span class="p">(</span><span class="dl">'</span><span class="s1">B</span><span class="dl">'</span><span class="p">);</span>
+  <span class="nf">resolve</span><span class="p">();</span>
+<span class="p">}).</span><span class="nf">then</span><span class="p">(</span><span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+  <span class="nx">console</span><span class="p">.</span><span class="nf">log</span><span class="p">(</span><span class="dl">'</span><span class="s1">C</span><span class="dl">'</span><span class="p">);</span>
+<span class="p">});</span>
+
+<span class="nx">console</span><span class="p">.</span><span class="nf">log</span><span class="p">(</span><span class="dl">'</span><span class="s1">D</span><span class="dl">'</span><span class="p">);</span>
+</code></pre></div></div>
+
+<p>The answer is <code class="language-plaintext highlighter-rouge">B D C A</code>.</p>
+
+<h3 id="steps">Steps</h3>
+
+<p>JS stack: []<br />
+macrotask queue: []<br />
+microtask queue: [] <br />
+output: []</p>
+
+<p>👇</p>
+
+<p>JS stack: []<br />
+macrotask queue: [console.log(‘A’)]<br />
+microtask queue: []<br />
+output: []</p>
+
+<p>👇</p>
+
+<p>JS stack: [console.log(‘B’)]<br />
+macrotask queue: [console.log(‘A’)]<br />
+microtask queue: []<br />
+output: []</p>
+
+<hr />
+
+<p>Per <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise">mdn</a>, the executor function is executed <strong>IMMEDIATELY</strong> by the Promise implementation, so <code class="language-plaintext highlighter-rouge">console.log('B')</code> will be scheduled to JS stack to execute directly.</p>
+
+<hr />
+
+<p>👇</p>
+
+<p>JS stack: []<br />
+macrotask queue: [console.log(‘A’)]<br />
+microtask queue: []<br />
+output: [B]</p>
+
+<p>👇</p>
+
+<p>JS stack: []<br />
+macrotask queue: [console.log(‘A’)]<br />
+microtask queue: [console.log(‘C’)]<br />
+output: [B]</p>
+
+<p>👇</p>
+
+<p>JS stack: [console.log(‘D’)]<br />
+macrotask queue: [console.log(‘A’)]<br />
+microtask queue: [console.log(‘C’)]<br />
+output: [B]</p>
+
+<p>👇</p>
+
+<p>JS stack: []<br />
+macrotask queue: [console.log(‘A’)]<br />
+microtask queue: [console.log(‘C’)]<br />
+output: [B, D]</p>
+
+<hr />
+
+<p>Now all synchronous code done and the JS stack is empty, so we are going to pick task from task queues. However, there is a confusing part. Should we pick task from macro queue first or micro queue first? The final output is <code class="language-plaintext highlighter-rouge">C A</code>, it seems like we pick task from micro queue first.</p>
+
+<p>IMO, we could consider this case in two ways.</p>
+
+<ul>
+  <li>Microtask queue is processed at the <strong>end</strong> of each macrotask, then you should treat whole script as a macrotask as well. In this way, our diagram will become</li>
+</ul>
+
+<p>JS stack: [script]<br />
+macrotask queue: [console.log(‘A’)]<br />
+microtask queue: [console.log(‘C’)]<br />
+output: [B, D]</p>
+
+<p>At this time, pop script task out first, then execute microtasks.</p>
+
+<ul>
+  <li>If you don’t treat whole script as macrotask, you can think we will pick task from microtask queue when JS stack is empty at first time</li>
+</ul>
+
+<hr />
+
+<p>👇</p>
+
+<p>JS stack: [console.log(‘C’)]<br />
+macrotask queue: [console.log(‘A’)]<br />
+microtask queue: []<br />
+output: [B, D]</p>
+
+<p>👇</p>
+
+<p>JS stack: []<br />
+macrotask queue: [console.log(‘A’)]<br />
+microtask queue: []<br />
+output: [B, D, C]</p>
+
+<p>👇</p>
+
+<p>JS stack: [console.log(‘A’)]<br />
+macrotask queue: []<br />
+microtask queue: []<br />
+output: [B, D, C]</p>
+
+<p>👇</p>
+
+<p>JS stack: []<br />
+macrotask queue: []<br />
+microtask queue: []<br />
+output: [B, D, C, A]</p>
+
+<p>It’s done.</p>
+
+<h2 id="conclusion">Conclusion</h2>
+
+<ul>
+  <li>task (queue) === marcotask (queue)</li>
+  <li>job (queue) ≈≈≈ microtask (queue) (Per You don’t know JavaScript, they are same; but per ecma, there are two kinds of jobs, <code class="language-plaintext highlighter-rouge">ScriptJobs</code> and <code class="language-plaintext highlighter-rouge">PromiseJobs</code>, I don’t understand <code class="language-plaintext highlighter-rouge">ScriptJobs</code> clearly, but the most important thing we should know is <code class="language-plaintext highlighter-rouge">promise.then</code> is one kind of <code class="language-plaintext highlighter-rouge">microtask</code></li>
+  <li>When JS stack (aka execution stack, or call stack) is empty, pick the oldest task from macro queue into JS stack to execute, then pick <strong>ALL</strong> tasks (or jobs) from micro queue to execute, then pick the oldest task from macro queue again</li>
+  <li>macrotasks: script (whole script, you can consider it as main()), setTimeout, setInterval, setImmediate, I/O, UI rendering</li>
+  <li>microtasks: process.nextTick, Promises, Object.observe, MutationObserver</li>
+</ul>
+
+<h2 id="references">References</h2>
+
+<h3 id="standard">Standard</h3>
+
+<ul>
+  <li><a href="https://html.spec.whatwg.org/multipage/webappapis.html#event-loops">https://html.spec.whatwg.org/multipage/webappapis.html#event-loops</a></li>
+  <li><a href="https://html.spec.whatwg.org/multipage/webappapis.html#integration-with-the-javascript-job-queue">https://html.spec.whatwg.org/multipage/webappapis.html#integration-with-the-javascript-job-queue</a></li>
+  <li><a href="http://ecma-international.org/ecma-262/6.0/index.html#sec-jobs-and-job-queues">http://ecma-international.org/ecma-262/6.0/index.html#sec-jobs-and-job-queues</a></li>
+</ul>
+
+<h3 id="books">Books</h3>
+
+<ul>
+  <li><a href="https://github.com/getify/You-Dont-Know-JS/blob/master/async%20%26%20performance/ch1.md#event-loop">https://github.com/getify/You-Dont-Know-JS/blob/master/async%20%26%20performance/ch1.md#event-loop</a></li>
+</ul>
+
+<h3 id="articles">Articles</h3>
+
+<ul>
+  <li><a href="https://jakearchibald.com/2015/tasks-microtasks-queues-and-schedules/">https://jakearchibald.com/2015/tasks-microtasks-queues-and-schedules/</a></li>
+</ul>]]></content><author><name></name></author><category term="javascript" /><category term="event loop" /><summary type="html"><![CDATA[What the heck is the event loop anyway? – Philip Roberts]]></summary></entry><entry><title type="html">When should we push records to Ember Data?</title><link href="https://just4fun.github.io/2017/07/12/when-should-we-push-records-to-ember-data/" rel="alternate" type="text/html" title="When should we push records to Ember Data?" /><published>2017-07-12T00:00:00+00:00</published><updated>2017-07-12T00:00:00+00:00</updated><id>https://just4fun.github.io/2017/07/12/when-should-we-push-records-to-ember-data</id><content type="html" xml:base="https://just4fun.github.io/2017/07/12/when-should-we-push-records-to-ember-data/"><![CDATA[<p>Hey, I resovled an interesting defect these days about Ember data and I wanna share it to you all.</p>
+
+<hr />
+
+<p>Let’s say we have three kinds of components on the page.</p>
+
+<p><img src="https://user-images.githubusercontent.com/7512625/28120727-75de7e32-674b-11e7-9707-c40d79750209.png" alt="" /></p>
+
+<p>Regarding <code class="language-plaintext highlighter-rouge">overview-goals-month-goal.js</code>, its main content is an <code class="language-plaintext highlighter-rouge">input</code> element.</p>
+
+<p>We have a computed property named <code class="language-plaintext highlighter-rouge">readonlyMonth</code> in top component <code class="language-plaintext highlighter-rouge">overview-goals.js</code> to indicate whether each input element is readonly or not, then pass it down.</p>
+
+<figure class="highlight"><pre><code class="language-javascript" data-lang="javascript"><span class="nx">readonlyMonth</span><span class="p">:</span> <span class="nf">computed</span><span class="p">(</span><span class="dl">'</span><span class="s1">data.months.1.goals.@each.goal-id</span><span class="dl">'</span><span class="p">,</span> <span class="p">{</span>
+  <span class="nf">get</span><span class="p">()</span> <span class="p">{</span>
+    <span class="kd">let</span> <span class="nx">thisMonthGoals</span> <span class="o">=</span> <span class="nf">get</span><span class="p">(</span><span class="k">this</span><span class="p">,</span> <span class="dl">'</span><span class="s1">data.months.1.goals</span><span class="dl">'</span><span class="p">);</span>
+
+    <span class="k">return</span> <span class="p">{</span>
+      <span class="mi">0</span><span class="p">:</span> <span class="kc">true</span><span class="p">,</span>
+      <span class="mi">1</span><span class="p">:</span> <span class="kc">false</span><span class="p">,</span>
+      <span class="mi">2</span><span class="p">:</span> <span class="nf">isEmpty</span><span class="p">(</span><span class="nx">thisMonthGoals</span><span class="p">)</span> <span class="o">||</span> <span class="nx">thisMonthGoals</span><span class="p">.</span><span class="nf">any</span><span class="p">((</span><span class="nx">goal</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">(</span><span class="o">!</span><span class="nx">goal</span><span class="p">[</span><span class="dl">'</span><span class="s1">goal-id</span><span class="dl">'</span><span class="p">]))</span>
+    <span class="p">};</span>
+  <span class="p">}</span>
+<span class="p">})</span></code></pre></figure>
+
+<p>That said, for the first input, it’s always readonly. <br />
+For the second one, it’s always editable.</p>
+
+<p>As for third input element, it depends on whether second input has value, which means it always be readonly unless the second input has value.</p>
+
+<figure class="half">
+  <img src="https://user-images.githubusercontent.com/7512625/28121513-ecf6a5ba-674d-11e7-9ddd-427266bf42e4.png" />
+  <img src="https://user-images.githubusercontent.com/7512625/28121514-ed03f6ca-674d-11e7-89df-3482e6825147.png" />
+  <figcaption>Once we gave second input any value, the third input will be editable immediately.</figcaption>
+</figure>
+
+<hr />
+
+<p>For more background, I’d also like to share the data structure and API response.</p>
+
+<p><code class="language-plaintext highlighter-rouge">model/goal-reports.js</code></p>
+
+<figure class="highlight"><pre><code class="language-javascript" data-lang="javascript"><span class="k">export</span> <span class="k">default</span> <span class="nx">Model</span><span class="p">.</span><span class="nf">extend</span><span class="p">({</span>
+  <span class="na">summary</span><span class="p">:</span> <span class="nf">attr</span><span class="p">(),</span>
+  <span class="na">months</span><span class="p">:</span> <span class="nf">attr</span><span class="p">(),</span>
+
+  <span class="na">goalMonths</span><span class="p">:</span> <span class="nf">computed</span><span class="p">(</span><span class="dl">'</span><span class="s1">months.[]</span><span class="dl">'</span><span class="p">,</span> <span class="p">{</span>
+    <span class="nf">get</span><span class="p">()</span> <span class="p">{</span>
+      <span class="kd">let</span> <span class="nx">months</span> <span class="o">=</span> <span class="nf">get</span><span class="p">(</span><span class="k">this</span><span class="p">,</span> <span class="dl">'</span><span class="s1">months</span><span class="dl">'</span><span class="p">);</span>
+      <span class="kd">let</span> <span class="nx">goals</span> <span class="o">=</span> <span class="nf">get</span><span class="p">(</span><span class="k">this</span><span class="p">,</span> <span class="dl">'</span><span class="s1">goals</span><span class="dl">'</span><span class="p">);</span>
+
+      <span class="nx">months</span><span class="p">.</span><span class="nf">forEach</span><span class="p">(</span><span class="nx">month</span> <span class="o">=&gt;</span> <span class="p">{</span>
+        <span class="nx">month</span><span class="p">.</span><span class="nx">goals</span><span class="p">.</span><span class="nf">forEach</span><span class="p">(</span><span class="nx">goal</span> <span class="o">=&gt;</span> <span class="p">{</span>
+          <span class="nx">goal</span><span class="p">.</span><span class="nx">goal</span> <span class="o">=</span> <span class="nx">goals</span><span class="p">.</span><span class="nf">findBy</span><span class="p">(</span><span class="dl">'</span><span class="s1">id</span><span class="dl">'</span><span class="p">,</span> <span class="nx">goal</span><span class="p">[</span><span class="dl">'</span><span class="s1">goal-id</span><span class="dl">'</span><span class="p">]);</span>
+        <span class="p">});</span>
+      <span class="p">});</span>
+
+      <span class="k">return</span> <span class="nx">months</span><span class="p">;</span>
+    <span class="p">}</span>
+  <span class="p">}),</span>
+
+  <span class="na">goals</span><span class="p">:</span> <span class="nf">hasMany</span><span class="p">(</span><span class="dl">'</span><span class="s1">goal</span><span class="dl">'</span><span class="p">)</span>
+<span class="p">});</span></code></pre></figure>
+
+<p><code class="language-plaintext highlighter-rouge">model/goal.js</code></p>
+
+<figure class="highlight"><pre><code class="language-javascript" data-lang="javascript"><span class="k">export</span> <span class="k">default</span> <span class="nx">Model</span><span class="p">.</span><span class="nf">extend</span><span class="p">({</span>
+  <span class="na">goalValue</span><span class="p">:</span> <span class="nf">attr</span><span class="p">(</span><span class="dl">'</span><span class="s1">number</span><span class="dl">'</span><span class="p">),</span>
+  <span class="na">goalYear</span><span class="p">:</span> <span class="nf">attr</span><span class="p">(),</span>
+  <span class="na">goalMonth</span><span class="p">:</span> <span class="nf">attr</span><span class="p">()</span>
+
+  <span class="c1">//...</span>
+<span class="p">});</span></code></pre></figure>
+
+<p>If we give second input any value, <code class="language-plaintext highlighter-rouge">POST /api/goals</code> will be requested once we focused out. <br />
+When we get 200, as we know, Ember data will fill <code class="language-plaintext highlighter-rouge">id</code> with API response.</p>
+
+<p class="notice"><strong>Here comes the question,</strong> the goal record we saved is equal to the <code class="language-plaintext highlighter-rouge">goal.goal</code> in each months (see the computed property <code class="language-plaintext highlighter-rouge">goalMonths</code> in <code class="language-plaintext highlighter-rouge">goal-reports</code> model), why the third input still be readonly even <code class="language-plaintext highlighter-rouge">goalRecord.save()</code> successfully?</p>
+
+<hr />
+
+<p>Let’s take a look at the API response when we access this page.</p>
+
+<p><code class="language-plaintext highlighter-rouge">GET /api/goal-reports</code></p>
+
+<p><img src="https://user-images.githubusercontent.com/7512625/28122819-ea017228-6751-11e7-93d9-da6b8549235c.png" alt="" /></p>
+
+<p>There are two problems.</p>
+
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">readonlyMonth</code> in top component hasn’t been triggered</li>
+</ul>
+
+<p>It’s caused by that <code class="language-plaintext highlighter-rouge">goalMonths</code> in <code class="language-plaintext highlighter-rouge">goal-reports</code> model hasn’t been triggered, b/c the length of <code class="language-plaintext highlighter-rouge">months</code> is same. <br />
+Since <code class="language-plaintext highlighter-rouge">goalRecord.save()</code> successfully, there will be one more <code class="language-plaintext highlighter-rouge">goal</code> record in Ember data (we will discuss more about this in second problem), we should also add <code class="language-plaintext highlighter-rouge">goals.[]</code> to computed property <code class="language-plaintext highlighter-rouge">goalMonths</code>.</p>
+
+<figure class="highlight"><pre><code class="language-javascript" data-lang="javascript"><span class="nx">goalMonths</span><span class="p">:</span> <span class="nf">computed</span><span class="p">(</span><span class="dl">'</span><span class="s1">months.[]</span><span class="dl">'</span><span class="p">,</span> <span class="dl">'</span><span class="s1">goals.[]</span><span class="dl">'</span><span class="p">,</span> <span class="p">{</span>
+  <span class="nf">get</span><span class="p">()</span> <span class="p">{</span>
+    <span class="kd">let</span> <span class="nx">months</span> <span class="o">=</span> <span class="nf">get</span><span class="p">(</span><span class="k">this</span><span class="p">,</span> <span class="dl">'</span><span class="s1">months</span><span class="dl">'</span><span class="p">);</span>
+    <span class="kd">let</span> <span class="nx">goals</span> <span class="o">=</span> <span class="nf">get</span><span class="p">(</span><span class="k">this</span><span class="p">,</span> <span class="dl">'</span><span class="s1">goals</span><span class="dl">'</span><span class="p">);</span>
+
+    <span class="nx">months</span><span class="p">.</span><span class="nf">forEach</span><span class="p">(</span><span class="nx">month</span> <span class="o">=&gt;</span> <span class="p">{</span>
+      <span class="nx">month</span><span class="p">.</span><span class="nx">goals</span><span class="p">.</span><span class="nf">forEach</span><span class="p">(</span><span class="nx">goal</span> <span class="o">=&gt;</span> <span class="p">{</span>
+        <span class="nx">goal</span><span class="p">.</span><span class="nx">goal</span> <span class="o">=</span> <span class="nx">goals</span><span class="p">.</span><span class="nf">findBy</span><span class="p">(</span><span class="dl">'</span><span class="s1">id</span><span class="dl">'</span><span class="p">,</span> <span class="nx">goal</span><span class="p">[</span><span class="dl">'</span><span class="s1">goal-id</span><span class="dl">'</span><span class="p">]);</span>
+      <span class="p">});</span>
+    <span class="p">});</span>
+
+    <span class="k">return</span> <span class="nx">months</span><span class="p">;</span>
+  <span class="p">}</span>
+<span class="p">}),</span></code></pre></figure>
+
+<ul>
+  <li>The <code class="language-plaintext highlighter-rouge">goal-id</code> of second object in <code class="language-plaintext highlighter-rouge">months</code> is empty.</li>
+</ul>
+
+<p>In this case, even we add <code class="language-plaintext highlighter-rouge">goals.[]</code> to computed property <code class="language-plaintext highlighter-rouge">goalMonths</code>, <code class="language-plaintext highlighter-rouge">goalMonths</code> won’t be triggered as well.</p>
+
+<p>As we know, the <code class="language-plaintext highlighter-rouge">goals</code> of <code class="language-plaintext highlighter-rouge">goal-reports</code> model is returned in <code class="language-plaintext highlighter-rouge">included</code> field from API, that said even the new <code class="language-plaintext highlighter-rouge">goal</code> record with <code class="language-plaintext highlighter-rouge">id</code> has been update in store/Ember data, the <code class="language-plaintext highlighter-rouge">goals</code> in <code class="language-plaintext highlighter-rouge">goal-reprots</code> will still keep the same.</p>
+
+<p class="notice"><strong>Here come the resolution.</strong></p>
+
+<p>First we should create a closure action (<code class="language-plaintext highlighter-rouge">refreshReport</code>) in top component and pass it down. <br />
+When <code class="language-plaintext highlighter-rouge">goalRecord.save()</code> successfully, the closure action should be triggered with the new <code class="language-plaintext highlighter-rouge">goal</code> record.</p>
+
+<p>Then in top component,</p>
+
+<figure class="highlight"><pre><code class="language-javascript" data-lang="javascript"><span class="nf">refreshReport</span><span class="p">(</span><span class="nx">goal</span><span class="p">)</span> <span class="p">{</span>
+  <span class="c1">// first, get `goalsReport` from Ember data</span>
+  <span class="kd">let</span> <span class="nx">goalReports</span> <span class="o">=</span> <span class="nf">get</span><span class="p">(</span><span class="k">this</span><span class="p">,</span> <span class="dl">'</span><span class="s1">store</span><span class="dl">'</span><span class="p">).</span><span class="nf">peekAll</span><span class="p">(</span><span class="dl">'</span><span class="s1">goalsReport</span><span class="dl">'</span><span class="p">).</span><span class="nf">get</span><span class="p">(</span><span class="dl">'</span><span class="s1">firstObject</span><span class="dl">'</span><span class="p">);</span>
+
+  <span class="c1">// then figure out which month (as known as `input` I mentioned)</span>
+  <span class="kd">let</span> <span class="nx">month</span> <span class="o">=</span> <span class="nx">goalReports</span><span class="p">.</span><span class="nf">get</span><span class="p">(</span><span class="dl">'</span><span class="s1">months</span><span class="dl">'</span><span class="p">).</span><span class="nf">find</span><span class="p">(</span><span class="nx">month</span> <span class="o">=&gt;</span> <span class="k">this</span><span class="p">.</span><span class="nf">getMonth</span><span class="p">(</span><span class="nx">month</span><span class="p">.</span><span class="nx">date</span><span class="p">)</span> <span class="o">===</span> <span class="nx">goal</span><span class="p">.</span><span class="nf">get</span><span class="p">(</span><span class="dl">'</span><span class="s1">goalMonth</span><span class="dl">'</span><span class="p">));</span>
+
+  <span class="c1">// check whether the input has no value before</span>
+  <span class="k">if </span><span class="p">(</span><span class="o">!</span><span class="nx">month</span><span class="p">.</span><span class="nx">goals</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="dl">'</span><span class="s1">goal-id</span><span class="dl">'</span><span class="p">])</span> <span class="p">{</span>
+    <span class="c1">// set the `goal-id` with new `goal` record id</span>
+    <span class="nf">set</span><span class="p">(</span><span class="nx">month</span><span class="p">.</span><span class="nx">goals</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="dl">'</span><span class="s1">goal-id</span><span class="dl">'</span><span class="p">,</span> <span class="nx">goal</span><span class="p">.</span><span class="nx">id</span><span class="p">);</span>
+
+    <span class="c1">// push the new `goal` record into `goals` relationship in `goal-reports`.</span>
+    <span class="c1">// then `goalMonths` will be triggered, and new `goal` will be filled in</span>
+    <span class="c1">// each month, and also `readonlyMonth` will be re-triggered.</span>
+    <span class="nx">goalReports</span><span class="p">.</span><span class="nf">get</span><span class="p">(</span><span class="dl">'</span><span class="s1">goals</span><span class="dl">'</span><span class="p">).</span><span class="nf">pushObject</span><span class="p">(</span><span class="nx">goal</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span></code></pre></figure>
+
+<p>Does it makes sense?</p>]]></content><author><name></name></author><category term="JavaScript" /><category term="Ember" /><summary type="html"><![CDATA[Hey, I resovled an interesting defect these days about Ember data and I wanna share it to you all.]]></summary></entry><entry><title type="html">Reloading in Ember findAll and findRecord</title><link href="https://just4fun.github.io/2017/01/21/reloading-in-ember-findall-and-findrecord/" rel="alternate" type="text/html" title="Reloading in Ember findAll and findRecord" /><published>2017-01-21T00:00:00+00:00</published><updated>2017-01-21T00:00:00+00:00</updated><id>https://just4fun.github.io/2017/01/21/reloading-in-ember-findall-and-findrecord</id><content type="html" xml:base="https://just4fun.github.io/2017/01/21/reloading-in-ember-findall-and-findrecord/"><![CDATA[<p>Recently, QA reported two issues that which seems a little weird. After some investigations, I found they’re caused by my lack of knowledge of Ember Data APIs.</p>
+
+<h2 id="background">Background</h2>
+
+<ul>
+  <li><strong>We always got old records in Ember Data even it seems we have already sent new request and got new records from API</strong></li>
+</ul>
+
+<p>In our application, there is a dropdown list at the top of screen which contains many <code class="language-plaintext highlighter-rouge">branches</code>. Once we select a new branch, we will send a request.</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nf">didReceiveAttrs</span><span class="p">()</span> <span class="p">{</span>
+  <span class="k">this</span><span class="p">.</span><span class="nf">_super</span><span class="p">(...</span><span class="nx">arguments</span><span class="p">);</span>
+  <span class="k">this</span><span class="p">.</span><span class="nf">setupFilterGroups</span><span class="p">();</span>
+<span class="p">},</span>
+
+<span class="nf">setupFilterGroups</span><span class="p">()</span> <span class="p">{</span>
+  <span class="c1">// ...</span>
+
+  <span class="nf">get</span><span class="p">(</span><span class="k">this</span><span class="p">,</span> <span class="dl">'</span><span class="s1">store</span><span class="dl">'</span><span class="p">).</span><span class="nf">findAll</span><span class="p">(</span><span class="dl">'</span><span class="s1">zipcodeFilter</span><span class="dl">'</span><span class="p">).</span><span class="nf">then</span><span class="p">(</span><span class="nx">zipcodes</span> <span class="o">=&gt;</span> <span class="p">{</span>
+    <span class="c1">// we always got old `zipcodes` for last branch even we switched to a new branch</span>
+  <span class="p">});</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>After I dug into <a href="http://emberjs.com/api/data/classes/DS.Store.html#method_findAll">documentation</a> for <code class="language-plaintext highlighter-rouge">findAll</code>,</p>
+
+<blockquote>
+  <p><code class="language-plaintext highlighter-rouge">findAll</code> asks the adapter’s <code class="language-plaintext highlighter-rouge">findAll</code> method to find the records for the given type, and returns a promise which will resolve with all records of this type present in the store, even if the adapter only returns a subset of them.</p>
+</blockquote>
+
+<p>In addition,</p>
+
+<blockquote>
+  <p>When the returned promise resolves depends on the reload behavior, configured via the passed <code class="language-plaintext highlighter-rouge">options</code> hash and the result of the adapter’s <code class="language-plaintext highlighter-rouge">shouldReloadAll</code> method.</p>
+</blockquote>
+
+<p>There is also an example,</p>
+
+<blockquote>
+  <p>If <code class="language-plaintext highlighter-rouge">{ reload: true }</code> is passed or <code class="language-plaintext highlighter-rouge">adapter.shouldReloadAll</code> evaluates to <code class="language-plaintext highlighter-rouge">true</code>, then the returned promise resolves once the adapter returns data, regardless if there are already records in the store:</p>
+</blockquote>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">store</span><span class="p">.</span><span class="nf">push</span><span class="p">({</span>
+  <span class="na">data</span><span class="p">:</span> <span class="p">{</span>
+    <span class="na">id</span><span class="p">:</span> <span class="dl">'</span><span class="s1">first</span><span class="dl">'</span><span class="p">,</span>
+    <span class="na">type</span><span class="p">:</span> <span class="dl">'</span><span class="s1">author</span><span class="dl">'</span>
+  <span class="p">}</span>
+<span class="p">});</span>
+
+<span class="c1">// adapter#findAll resolves with</span>
+<span class="c1">// [</span>
+<span class="c1">//   {</span>
+<span class="c1">//     id: 'second',</span>
+<span class="c1">//     type: 'author'</span>
+<span class="c1">//   }</span>
+<span class="c1">// ]</span>
+
+<span class="nx">store</span><span class="p">.</span><span class="nf">findAll</span><span class="p">(</span><span class="dl">'</span><span class="s1">author</span><span class="dl">'</span><span class="p">,</span> <span class="p">{</span> <span class="na">reload</span><span class="p">:</span> <span class="kc">true</span> <span class="p">}).</span><span class="nf">then</span><span class="p">(</span><span class="kd">function</span><span class="p">(</span><span class="nx">authors</span><span class="p">)</span> <span class="p">{</span>
+  <span class="nx">authors</span><span class="p">.</span><span class="nf">getEach</span><span class="p">(</span><span class="dl">"</span><span class="s2">id</span><span class="dl">"</span><span class="p">);</span> <span class="c1">// ['first', 'second']</span>
+<span class="p">});</span>
+</code></pre></div></div>
+
+<blockquote>
+  <p>If no reload is indicated via the abovementioned ways, then the promise immediately resolves with all the records currently loaded in the store.</p>
+</blockquote>
+
+<p>That being said, without <code class="language-plaintext highlighter-rouge">reload: true</code>, <code class="language-plaintext highlighter-rouge">findAll</code> will always be resolved immediately if there are already records in the store, which will cause current issue.</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nf">didReceiveAttrs</span><span class="p">()</span> <span class="p">{</span>
+  <span class="k">this</span><span class="p">.</span><span class="nf">_super</span><span class="p">(...</span><span class="nx">arguments</span><span class="p">);</span>
+  <span class="k">this</span><span class="p">.</span><span class="nf">setupFilterGroups</span><span class="p">();</span>
+<span class="p">},</span>
+
+<span class="nf">setupFilterGroups</span><span class="p">()</span> <span class="p">{</span>
+  <span class="c1">// ...</span>
+
+  <span class="nf">get</span><span class="p">(</span><span class="k">this</span><span class="p">,</span> <span class="dl">'</span><span class="s1">store</span><span class="dl">'</span><span class="p">).</span><span class="nf">findAll</span><span class="p">(</span><span class="dl">'</span><span class="s1">zipcodeFilter</span><span class="dl">'</span><span class="p">,</span> <span class="p">{</span> <span class="na">reload</span><span class="p">:</span> <span class="kc">true</span> <span class="p">}).</span><span class="nf">then</span><span class="p">(</span><span class="nx">zipcodes</span> <span class="o">=&gt;</span> <span class="p">{</span>
+    <span class="c1">// it WORKS now, `zipcodes` will always be new records from API</span>
+  <span class="p">});</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<ul>
+  <li><strong>A button will always be enabled before all the requests it depends on resolved</strong></li>
+</ul>
+
+<p>There is a button in our application, we introduced <a href="http://ember-concurrency.com/"><code class="language-plaintext highlighter-rouge">ember-concurrency</code></a> and bound <code class="language-plaintext highlighter-rouge">disabled=isProcessing</code> to it with three <code class="language-plaintext highlighter-rouge">task</code>s.</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">createFollowup</span><span class="p">:</span> <span class="nf">task</span><span class="p">(</span><span class="kd">function</span> <span class="o">*</span><span class="p">(</span><span class="nx">followupStatus</span><span class="p">,</span> <span class="nx">followupDate</span><span class="p">)</span> <span class="p">{</span>
+  <span class="c1">// ...</span>
+<span class="p">}),</span>
+
+<span class="nx">clearFollowup</span><span class="p">:</span> <span class="nf">task</span><span class="p">(</span><span class="kd">function</span> <span class="o">*</span><span class="p">()</span> <span class="p">{</span>
+  <span class="c1">// ...</span>
+<span class="p">}),</span>
+
+<span class="nx">createContactAttempt</span><span class="p">:</span> <span class="nf">task</span><span class="p">(</span><span class="kd">function</span> <span class="o">*</span><span class="p">(</span><span class="nx">subject</span><span class="p">,</span> <span class="nx">notes</span><span class="p">,</span> <span class="nx">contactStatus</span><span class="p">)</span> <span class="p">{</span>
+  <span class="c1">// ...</span>
+
+  <span class="k">yield</span> <span class="k">this</span><span class="p">.</span><span class="nx">store</span><span class="p">.</span><span class="nf">findRecord</span><span class="p">(</span><span class="dl">'</span><span class="s1">member</span><span class="dl">'</span><span class="p">,</span> <span class="k">this</span><span class="p">.</span><span class="nf">get</span><span class="p">(</span><span class="dl">'</span><span class="s1">id</span><span class="dl">'</span><span class="p">));</span>
+<span class="p">}),</span>
+
+<span class="nx">isProcessing</span><span class="p">:</span> <span class="nx">Ember</span><span class="p">.</span><span class="nx">computed</span><span class="p">.</span><span class="nf">or</span><span class="p">(</span><span class="dl">'</span><span class="s1">createFollowup.isRunning</span><span class="dl">'</span><span class="p">,</span> <span class="dl">'</span><span class="s1">clearFollowup.isRunning</span><span class="dl">'</span><span class="p">,</span> <span class="dl">'</span><span class="s1">createContactAttempt.isRunning</span><span class="dl">'</span><span class="p">)</span>
+</code></pre></div></div>
+
+<p>However, the button is still disabled before <code class="language-plaintext highlighter-rouge">createFollowup</code> and <code class="language-plaintext highlighter-rouge">clearFollowup</code> resolved, but it will be enabled once both of them finished without <code class="language-plaintext highlighter-rouge">createContactAttempt</code> being resolved.</p>
+
+<p>The root cause is same as previous case,</p>
+
+<blockquote>
+  <p>If the record is not yet available, the store will ask the adapter’s <code class="language-plaintext highlighter-rouge">find</code> method to find the necessary data. If the record is already present in the store, it depends on the reload behavior <em>when</em> the returned promise resolves.</p>
+</blockquote>
+
+<p>That said, if there is no <code class="language-plaintext highlighter-rouge">reload: true</code>, <code class="language-plaintext highlighter-rouge">findRecord</code> will resolve the old value from Ember Data first, which will lead <code class="language-plaintext highlighter-rouge">createContactAttempt.isRunning</code> to be <code class="language-plaintext highlighter-rouge">false</code> even <code class="language-plaintext highlighter-rouge">member</code> is still being fetched.</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">createContactAttempt</span><span class="p">:</span> <span class="nf">task</span><span class="p">(</span><span class="kd">function</span> <span class="o">*</span><span class="p">(</span><span class="nx">subject</span><span class="p">,</span> <span class="nx">notes</span><span class="p">,</span> <span class="nx">contactStatus</span><span class="p">)</span> <span class="p">{</span>
+  <span class="c1">// ...</span>
+
+  <span class="c1">// it WORKS now, `createContactAttempt.isRunning` always be `true` before all `task`s resolved</span>
+  <span class="k">yield</span> <span class="k">this</span><span class="p">.</span><span class="nx">store</span><span class="p">.</span><span class="nf">findRecord</span><span class="p">(</span><span class="dl">'</span><span class="s1">member</span><span class="dl">'</span><span class="p">,</span> <span class="k">this</span><span class="p">.</span><span class="nf">get</span><span class="p">(</span><span class="dl">'</span><span class="s1">id</span><span class="dl">'</span><span class="p">),</span> <span class="p">{</span> <span class="na">reload</span><span class="p">:</span> <span class="kc">true</span> <span class="p">});</span>
+<span class="p">})</span>
+</code></pre></div></div>
+
+<h2 id="conclusion">Conclusion</h2>
+
+<p>Like the Ember official website mentioned,</p>
+
+<blockquote>
+  <p>Ember is a framework for creating <strong>ambitious</strong> web applications.</p>
+</blockquote>
+
+<p>There are lots of advanced usage for Ember, if there is anything weird, we can always refer Ember APIs documentation first.</p>]]></content><author><name></name></author><category term="ember" /><summary type="html"><![CDATA[Recently, QA reported two issues that which seems a little weird. After some investigations, I found they’re caused by my lack of knowledge of Ember Data APIs.]]></summary></entry><entry><title type="html">Flux vs Redux</title><link href="https://just4fun.github.io/2016/07/13/flux-vs-redux/" rel="alternate" type="text/html" title="Flux vs Redux" /><published>2016-07-13T00:00:00+00:00</published><updated>2016-07-13T00:00:00+00:00</updated><id>https://just4fun.github.io/2016/07/13/flux-vs-redux</id><content type="html" xml:base="https://just4fun.github.io/2016/07/13/flux-vs-redux/"><![CDATA[<p><a href="https://github.com/reactjs/redux">Redux</a> is very popular in recent two years, it seems like it has become the standard architecture in React application.</p>
+
+<p>Let’s compare it with original <a href="2015/05/12/flux-architecture/">Flux</a>.</p>
+
+<p>As Redux <a href="http://redux.js.org/index.html">official doc</a> mentioned,</p>
+
+<blockquote>
+  <p>Redux evolves the ideas of Flux, but avoids its complexity.</p>
+</blockquote>
+
+<p>That being said, Redux is also utilizing <strong>unidirectional</strong> data flow.</p>
+
+<p><em>But what is the main difference between them?</em>
+<em>And what is the complexity of Flux?</em></p>
+
+<p>As we know, Redux has <strong>three principles</strong>.</p>
+
+<ul>
+  <li>Single source of truth</li>
+  <li>State is read-only</li>
+  <li>Changes are made with pure functions</li>
+</ul>
+
+<p>IMO, the main difference between Redux and Flux is mainly focused on the first one.</p>
+
+<h2 id="flux-way">Flux Way</h2>
+
+<ul>
+  <li><strong>Dispatcher</strong> distributes <strong>Actions</strong> to <strong>Stores</strong></li>
+  <li><strong>Stores</strong> broadcast events to notify <strong>Views</strong> to update</li>
+</ul>
+
+<p>We noticed that <strong>Stores</strong> is plural, which means we can use multiple stores in Flux architecture.</p>
+
+<p>Let’s go through an example from Flux source code.</p>
+
+<blockquote>
+  <p>Consider there is a flight destination form, which selects a default city when a country is selected.</p>
+</blockquote>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">let</span> <span class="nx">flightDispatcher</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">Dispatcher</span><span class="p">();</span>
+
+<span class="c1">// keeps track of which country is selected</span>
+<span class="kd">let</span> <span class="nx">CountryStore</span> <span class="o">=</span> <span class="p">{</span> <span class="na">country</span><span class="p">:</span> <span class="kc">null</span> <span class="p">};</span>
+
+<span class="c1">// keeps track of which city is selected</span>
+<span class="kd">let</span> <span class="nx">CityStore</span> <span class="o">=</span> <span class="p">{</span> <span class="na">city</span><span class="p">:</span> <span class="kc">null</span> <span class="p">};</span>
+
+<span class="c1">// keeps track of the base flight price of the selected city</span>
+<span class="kd">let</span> <span class="nx">FlightPriceStore</span> <span class="o">=</span> <span class="p">{</span> <span class="na">price</span><span class="p">:</span> <span class="kc">null</span> <span class="p">};</span>
+</code></pre></div></div>
+
+<p>When a user changes the selected city, we dispatch the payload.</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">flightDispatcher</span><span class="p">.</span><span class="nf">dispatch</span><span class="p">({</span>
+  <span class="na">actionType</span><span class="p">:</span> <span class="dl">'</span><span class="s1">city-update</span><span class="dl">'</span><span class="p">,</span>
+  <span class="na">selectedCity</span><span class="p">:</span> <span class="dl">'</span><span class="s1">paris</span><span class="dl">'</span>
+<span class="p">});</span>
+</code></pre></div></div>
+
+<p>This payload is digested by <code class="language-plaintext highlighter-rouge">CityStore</code>.</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">flightDispatcher</span><span class="p">.</span><span class="nf">register</span><span class="p">(</span><span class="kd">function</span><span class="p">(</span><span class="nx">payload</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">if </span><span class="p">(</span><span class="nx">payload</span><span class="p">.</span><span class="nx">actionType</span> <span class="o">===</span> <span class="dl">'</span><span class="s1">city-update</span><span class="dl">'</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">CityStore</span><span class="p">.</span><span class="nx">city</span> <span class="o">=</span> <span class="nx">payload</span><span class="p">.</span><span class="nx">selectedCity</span><span class="p">;</span>
+  <span class="p">}</span>
+<span class="p">});</span>
+</code></pre></div></div>
+
+<p>When the user selects a country, we dispatch the payload.</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">flightDispatcher</span><span class="p">.</span><span class="nf">dispatch</span><span class="p">({</span>
+  <span class="na">actionType</span><span class="p">:</span> <span class="dl">'</span><span class="s1">country-update</span><span class="dl">'</span><span class="p">,</span>
+  <span class="na">selectedCountry</span><span class="p">:</span> <span class="dl">'</span><span class="s1">australia</span><span class="dl">'</span>
+<span class="p">});</span>
+</code></pre></div></div>
+
+<p>This payload is digested by <strong>BOTH</strong> stores.</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">CountryStore</span><span class="p">.</span><span class="nx">dispatchToken</span> <span class="o">=</span> <span class="nx">flightDispatcher</span><span class="p">.</span><span class="nf">register</span><span class="p">(</span><span class="kd">function</span><span class="p">(</span><span class="nx">payload</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">if </span><span class="p">(</span><span class="nx">payload</span><span class="p">.</span><span class="nx">actionType</span> <span class="o">===</span> <span class="dl">'</span><span class="s1">country-update</span><span class="dl">'</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">CountryStore</span><span class="p">.</span><span class="nx">country</span> <span class="o">=</span> <span class="nx">payload</span><span class="p">.</span><span class="nx">selectedCountry</span><span class="p">;</span>
+  <span class="p">}</span>
+<span class="p">});</span>
+</code></pre></div></div>
+
+<p>When the callback to update <code class="language-plaintext highlighter-rouge">CountryStore</code> is registered, we save a reference to the returned token. Using this token with <code class="language-plaintext highlighter-rouge">waitFor()</code>, we can guarantee that <code class="language-plaintext highlighter-rouge">CountryStore</code> is updated before the callback that updates <code class="language-plaintext highlighter-rouge">CityStore</code> needs to query its data.</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">CityStore</span><span class="p">.</span><span class="nx">dispatchToken</span> <span class="o">=</span> <span class="nx">flightDispatcher</span><span class="p">.</span><span class="nf">register</span><span class="p">(</span><span class="kd">function</span><span class="p">(</span><span class="nx">payload</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">if </span><span class="p">(</span><span class="nx">payload</span><span class="p">.</span><span class="nx">actionType</span> <span class="o">===</span> <span class="dl">'</span><span class="s1">country-update</span><span class="dl">'</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// `CountryStore.country` may not be updated</span>
+    <span class="nx">flightDispatcher</span><span class="p">.</span><span class="nf">waitFor</span><span class="p">([</span><span class="nx">CountryStore</span><span class="p">.</span><span class="nx">dispatchToken</span><span class="p">]);</span>
+    <span class="c1">// `CountryStore.country` is now guaranteed to be updated</span>
+
+    <span class="c1">// select the default city for the new country</span>
+    <span class="nx">CityStore</span><span class="p">.</span><span class="nx">city</span> <span class="o">=</span> <span class="nf">getDefaultCityForCountry</span><span class="p">(</span><span class="nx">CountryStore</span><span class="p">.</span><span class="nx">country</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">});</span>
+</code></pre></div></div>
+
+<p>The <code class="language-plaintext highlighter-rouge">country-update</code> payload will be guaranteed to invoke the stores’ registered callbacks in order: <code class="language-plaintext highlighter-rouge">CountryStore</code>, then <code class="language-plaintext highlighter-rouge">CityStore</code>.</p>
+
+<hr />
+
+<p>You may noticed that we should do lots of stuff in Flux.</p>
+
+<ul>
+  <li>should register callbacks both in CountryStore and CityStore to update state</li>
+  <li>should register callbacks both in CountryView and CityView to update views (omitted in code above)</li>
+  <li>should use <code class="language-plaintext highlighter-rouge">waitFor()</code> if we want to guarantee the update order between different stores</li>
+</ul>
+
+<p>IMO, these are the <strong>complexities</strong> in Flux.</p>
+
+<h2 id="redux-way">Redux Way</h2>
+
+<p>In Redux, there is no Dispatcher (but there is <code class="language-plaintext highlighter-rouge">store.dispatch()</code>), moreover, there in only a <strong>SINGLE</strong> store, which holds the whole application state in a <strong>SINGLE</strong> object.</p>
+
+<p>Let’s update the code above in Redux approach.</p>
+
+<p>First, we need to create a single store with <code class="language-plaintext highlighter-rouge">reducers</code>, then register a listener on the store. The listener will rerender whole application.</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">let</span> <span class="nx">store</span> <span class="o">=</span> <span class="nf">createStore</span><span class="p">(</span><span class="nx">reducers</span><span class="p">);</span>
+<span class="nx">store</span><span class="p">.</span><span class="nf">subscribe</span><span class="p">(</span><span class="nx">render</span><span class="p">);</span>
+</code></pre></div></div>
+
+<p>When a user changes the selected city, we dispatch the payload, but via <code class="language-plaintext highlighter-rouge">store.dispatch()</code> instead.</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">store</span><span class="p">.</span><span class="nf">dispatch</span><span class="p">({</span>
+  <span class="na">actionType</span><span class="p">:</span> <span class="dl">'</span><span class="s1">city-update</span><span class="dl">'</span><span class="p">,</span>
+  <span class="na">selectedCity</span><span class="p">:</span> <span class="dl">'</span><span class="s1">paris</span><span class="dl">'</span>
+<span class="p">});</span>
+</code></pre></div></div>
+
+<p>This payload is digested by <code class="language-plaintext highlighter-rouge">CityReducer</code>.</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">function</span> <span class="nf">city</span><span class="p">(</span><span class="nx">state</span> <span class="o">=</span> <span class="p">{},</span> <span class="nx">action</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">switch </span><span class="p">(</span><span class="nx">action</span><span class="p">.</span><span class="nx">type</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">case</span> <span class="dl">'</span><span class="s1">city-update</span><span class="dl">'</span><span class="p">:</span>
+      <span class="k">return</span> <span class="nx">object</span><span class="p">.</span><span class="nf">assign</span><span class="p">({},</span> <span class="nx">state</span><span class="p">,</span> <span class="p">{</span>
+        <span class="na">city</span><span class="p">:</span> <span class="nx">action</span><span class="p">.</span><span class="nx">selectedCity</span>
+      <span class="p">});</span>
+    <span class="nl">default</span><span class="p">:</span>
+      <span class="k">return</span> <span class="nx">state</span><span class="p">;</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>When the user selects a country, we dispatch the payload.</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">store</span><span class="p">.</span><span class="nf">dispatch</span><span class="p">({</span>
+  <span class="na">actionType</span><span class="p">:</span> <span class="dl">'</span><span class="s1">country-update</span><span class="dl">'</span><span class="p">,</span>
+  <span class="na">selectedCountry</span><span class="p">:</span> <span class="dl">'</span><span class="s1">australia</span><span class="dl">'</span>
+<span class="p">});</span>
+</code></pre></div></div>
+
+<p>This payload is <strong>ONLY</strong> digested by <code class="language-plaintext highlighter-rouge">CountryReducer</code>.</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">function</span> <span class="nf">country</span><span class="p">(</span><span class="nx">state</span> <span class="o">=</span> <span class="p">{},</span> <span class="nx">action</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">switch </span><span class="p">(</span><span class="nx">action</span><span class="p">.</span><span class="nx">type</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">case</span> <span class="dl">'</span><span class="s1">country-update</span><span class="dl">'</span><span class="p">:</span>
+      <span class="k">return</span> <span class="nx">object</span><span class="p">.</span><span class="nf">assign</span><span class="p">({},</span> <span class="nx">state</span><span class="p">,</span> <span class="p">{</span>
+        <span class="na">country</span><span class="p">:</span> <span class="nx">action</span><span class="p">.</span><span class="nx">selectedCountry</span>
+      <span class="p">});</span>
+    <span class="nl">default</span><span class="p">:</span>
+      <span class="k">return</span> <span class="nx">state</span><span class="p">;</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>But how can we guarantee that select a country will trigger select a default city?</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nf">componentWillReceiveProps</span><span class="p">(</span><span class="nx">nextProps</span><span class="p">)</span> <span class="p">{</span>
+  <span class="c1">// check whether there is new country selected</span>
+  <span class="k">if </span><span class="p">(</span><span class="nx">nextProps</span><span class="p">.</span><span class="nx">country</span> <span class="o">!==</span> <span class="k">this</span><span class="p">.</span><span class="nx">props</span><span class="p">.</span><span class="nx">country</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">store</span><span class="p">.</span><span class="nf">dispatch</span><span class="p">({</span>
+      <span class="na">actionType</span><span class="p">:</span> <span class="dl">'</span><span class="s1">city-update</span><span class="dl">'</span><span class="p">,</span>
+      <span class="na">selectedCity</span><span class="p">:</span> <span class="k">this</span><span class="p">.</span><span class="nf">getDefaultCityForCountry</span><span class="p">(</span><span class="nx">nextProps</span><span class="p">.</span><span class="nx">country</span><span class="p">)</span>
+    <span class="p">});</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>Obviously, we render our whole application two times instead of using <code class="language-plaintext highlighter-rouge">waitFor()</code> in Flux to guarantee the order.</p>
+
+<hr />
+
+<p>Let’s take a look at the steps in Redux approach.</p>
+
+<ol>
+  <li>should have CityReducer and CountryReducer to update state</li>
+  <li>only need to register <strong>ONE</strong> callback on the top level store to rerender</li>
+  <li>no need to guarantee order, just <strong>RERENDER</strong></li>
+</ol>
+
+<h2 id="tips">Tips</h2>
+
+<p>You may noticed that we can also register the callbacks on the top level in Flux for updating Views.
+In this way, we have no need to guarantee the order, just rerender like how we did in Redux.</p>
+
+<p>However, there is one thing different.</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">CityStore</span><span class="p">.</span><span class="nf">addChangeListener</span><span class="p">(</span><span class="nx">render</span><span class="p">);</span>
+<span class="nx">CountryStore</span><span class="p">.</span><span class="nf">addChangeListener</span><span class="p">(</span><span class="nx">render</span><span class="p">);</span>
+
+<span class="c1">// if there are other stores, we should also</span>
+<span class="c1">// register the render callback on them.</span>
+
+<span class="c1">// but in Redux, we only need to register one,</span>
+<span class="c1">// since there is only one store holds one object.</span>
+</code></pre></div></div>
+
+<p>Got <strong>simplicity</strong> of Redux now?</p>]]></content><author><name></name></author><category term="js" /><category term="flux" /><category term="redux" /><summary type="html"><![CDATA[Redux is very popular in recent two years, it seems like it has become the standard architecture in React application.]]></summary></entry><entry><title type="html">My first iOS app built with React Native</title><link href="https://just4fun.github.io/2016/03/30/my-first-ios-app-built-with-react-native/" rel="alternate" type="text/html" title="My first iOS app built with React Native" /><published>2016-03-30T00:00:00+00:00</published><updated>2016-03-30T00:00:00+00:00</updated><id>https://just4fun.github.io/2016/03/30/my-first-ios-app-built-with-react-native</id><content type="html" xml:base="https://just4fun.github.io/2016/03/30/my-first-ios-app-built-with-react-native/"><![CDATA[<p>In the latter half of last year, after I created <a href="http://just4fun.github.io/classics">a simple books searching demo</a> via React + Flux + Immutable.js (I also mentioned it in last two articles), I have really fallen in love with unidirectional data flow as also the amazing technology stack.</p>
+
+<!-- more -->
+
+<h2 id="motivation">Motivation</h2>
+
+<p>At that time, there is a Flux-liked architecture called <code class="language-plaintext highlighter-rouge">Redux</code> appeared in my eyes, even more surprising was that it gained lots of fans and stars in a short time (there will be another separate article for Redux). I really wanna try it to build a cool stuff with any other framework.</p>
+
+<p>I found there is no official app for <a href="http://bbs.uestc.edu.cn/">the BBS of my university</a> (the BBS site is powerdy by Discuz!, and there is only app which converted from Discuz! site by <a href="http://www.appbyme.com/">appbyme</a>), so why not build a customized app with React Native? There is almost no learning curve if you are familiar with React.</p>
+
+<h2 id="infrastructure">Infrastructure</h2>
+
+<p>When I started work on the basic infrastructure of the app, I had some troubles.</p>
+
+<ul>
+  <li>Some ES6/ES7 features can not be used (I stared with React Native 0.12.0)</li>
+  <li><a href="http://facebook.github.io/react-native/docs/getting-started.html">Official documents</a> have no UI demostration for each component</li>
+  <li>There is almost no React Native app on Github for reference in addition to some small demos</li>
+</ul>
+
+<p>Anyway, the hardest part is actually in the beginning.</p>
+
+<ul>
+  <li>Bring Webpack and Babel in (<em>Unnecessary</em>)</li>
+  <li>Try each component in project to see the UI and behaviour (<em>Unnecessary</em>)</li>
+  <li>Why not become the reference on Github for other React Native developers? (<em>Cool</em>)</li>
+</ul>
+
+<p>With the basic development environment, I started work on BBS features after I read some <a href="https://github.com/reactjs/redux/tree/master/examples">examples</a> of Redux.</p>
+
+<h2 id="development">Development</h2>
+
+<p>Facebook just provided basic components to developers, if you need some customized features or components, you must wrote your own by creating bridge between JavaScript and Objective C. Unfortunately, I’m not familiar with it.</p>
+
+<p>Then I found there are already <a href="http://www.gajotres.net/must-have-plugins-for-react-native/">cool components</a> in the community, most of them are still being built, so I chose some of them.</p>
+
+<ul>
+  <li><a href="https://github.com/react-native-fellowship/react-native-side-menu">react-native-side-menu</a>: for basic layout</li>
+  <li><a href="https://github.com/jsdf/react-native-refreshable-listview">react-native-refreshable-listview</a>: for refershable listview</li>
+  <li><a href="https://github.com/oblador/react-native-vector-icons">react-native-vector-icons</a>: for icons in my project</li>
+</ul>
+
+<p>There is really no learing curve for me, just need minimal changes.</p>
+
+<ul>
+  <li>Use tag <code class="language-plaintext highlighter-rouge">&lt;View&gt;</code> instead of <code class="language-plaintext highlighter-rouge">&lt;div&gt;</code></li>
+  <li>Use Flexbox-liked layout with JS instead of CSS</li>
+</ul>
+
+<h2 id="best-practise">Best practise</h2>
+
+<ul>
+  <li>If you use React Native &lt; 0.16.0, add <code class="language-plaintext highlighter-rouge">.babelrc</code> instead of Babel plugin in your root if you want to use more ES6/ES7 features
+    <ul>
+      <li>If you use React Native &gt;= 0.16.0, you can not use <code class="language-plaintext highlighter-rouge">decorator</code> of ES7 because of Babel 6 (refer <a href="https://phabricator.babeljs.io/T2645">here</a>)</li>
+    </ul>
+  </li>
+  <li>Refer <a href="https://github.com/facebook/react-native/tree/master/Examples/UIExplorer">UIExplorer</a> example provided by React Native repo for component UI and funcationlities
+    <ul>
+      <li>It’s better to build this example on your device for consulting components usage everywhere</li>
+    </ul>
+  </li>
+  <li>Change <code class="language-plaintext highlighter-rouge">Build Configuration</code> from <code class="language-plaintext highlighter-rouge">Debug</code> to <code class="language-plaintext highlighter-rouge">Release</code> when using offline bundle, or the performance on your device will suffer greatly</li>
+</ul>
+
+<h2 id="what-i-gain">What I gain</h2>
+
+<ul>
+  <li>67 stars &amp; 20 forks on Github (as of the article publish date)
+    <ul>
+      <li>This is my first Github repo which gained attention from other developers, they treated this project as tutorials for React Native or Redux, and even ask me for the BBS account. It encouraged me to add new features or refactor some existed code</li>
+    </ul>
+  </li>
+  <li>Get more understanding in React
+    <ul>
+      <li>From React 0.14, it has been split into <code class="language-plaintext highlighter-rouge">react</code> and <code class="language-plaintext highlighter-rouge">react-dom</code> (refer <a href="https://facebook.github.io/react/blog/2015/10/07/react-v0.14.html#two-packages-react-and-react-dom">here</a>), that said the essence of React Native is same with React, so that’s why I said “there is almost no learning curve if you are familiar with React”</li>
+    </ul>
+  </li>
+  <li>Want to learn new skill
+    <ul>
+      <li>There is an <a href="https://github.com/facebook/react-native/issues/5616">issue</a> in my project, it seems like an unsupported feature in React Native. If I get familiar with Objective C, maybe I could create a PR for React Native</li>
+    </ul>
+  </li>
+</ul>
+
+<h2 id="repository">Repository</h2>
+
+<p>https://github.com/just4fun/uestc-bbs-react-native</p>
+
+<h2 id="screenshot">Screenshot</h2>
+
+<p><img src="https://cloud.githubusercontent.com/assets/7512625/13497473/54ac771a-e190-11e5-9a63-944ed8f836a1.gif" alt="" /></p>]]></content><author><name></name></author><category term="js" /><category term="app" /><category term="react native" /><category term="facebook" /><summary type="html"><![CDATA[In the latter half of last year, after I created a simple books searching demo via React + Flux + Immutable.js (I also mentioned it in last two articles), I have really fallen in love with unidirectional data flow as also the amazing technology stack.]]></summary></entry><entry><title type="html">Use immutable.js in React application</title><link href="https://just4fun.github.io/2015/07/18/use-immutable-js-in-react-application/" rel="alternate" type="text/html" title="Use immutable.js in React application" /><published>2015-07-18T00:00:00+00:00</published><updated>2015-07-18T00:00:00+00:00</updated><id>https://just4fun.github.io/2015/07/18/use-immutable-js-in-react-application</id><content type="html" xml:base="https://just4fun.github.io/2015/07/18/use-immutable-js-in-react-application/"><![CDATA[<p>In <a href="http://just4fun.github.io/hexo-blog/2015/05/12/flux-architecture/">previous article</a>, we got a general understanding about Flux architecture. And in <a href="http://just4fun.github.io/hexo-blog/2015/05/12/flux-architecture/#Best_Practise">Best Practise</a> section, I have mentioned <code class="language-plaintext highlighter-rouge">Immutable data</code> which I haven’t take a look yet. Now it’s time to dig into it.</p>
+
+<!-- more -->
+
+<h2 id="preliminaries">Preliminaries</h2>
+
+<p>If you have experience writing websites with React, you should know React makes use of a <code class="language-plaintext highlighter-rouge">virtual DOM</code>, which is a descriptor of a DOM subtree rendered in the browser. It is important to understand that the result of render is not an actual DOM node. Those are just lightweight JavaScript objects. That’s virtual DOM.</p>
+
+<p>When <code class="language-plaintext highlighter-rouge">setState</code> is called, the component rebuilds the virtual DOM for its children. If you call <code class="language-plaintext highlighter-rouge">setState</code> on the root element, then the entire React App is re-rendered. All the components, even if they didn’t change, will have their render method called. This may sound scary and inefficient but in practice, this works fine because we’re not touching the actual DOM.</p>
+
+<p>DOM operations are very expensive because modifying the DOM will also apply and calculate CSS styles, layouts. The saved time from unnecessary DOM modification can be longer than the time spent diffing the virtual DOM. This is the secret of React’s virtual DOM.</p>
+
+<p>However, the idea of re-rendering an entire subtree of components in response to every state change makes people wonder whether this process negatively impacts performance. That being said, if you want to get a considerable performance boost, you can minimize the number of costly DOM operations required to update the UI.</p>
+
+<h2 id="solution">Solution</h2>
+
+<p>React provides a component lifecycle function, <code class="language-plaintext highlighter-rouge">shouldComponentUpdate</code>, which is triggered before the re-rendering process starts (virtual DOM comparison and possible eventual DOM reconciliation), giving the developer the ability to short circuit this process. The default implementation of this function returns <code class="language-plaintext highlighter-rouge">true</code>, leaving React to perform the update.</p>
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">shouldComponentUpdate</span><span class="p">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">nextProps</span><span class="p">,</span> <span class="nx">nextState</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="kc">true</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>We could easily implement <code class="language-plaintext highlighter-rouge">shouldComponentUpdate</code> for simple props/state structures like bellow:</p>
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">shouldComponentUpdate</span><span class="p">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">nextProps</span><span class="p">,</span> <span class="nx">nextState</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">return</span> <span class="k">this</span><span class="p">.</span><span class="nx">props</span><span class="p">.</span><span class="nx">value</span> <span class="o">!==</span> <span class="nx">nextProps</span><span class="p">.</span><span class="nx">value</span><span class="p">)</span> 
+      <span class="o">||</span> <span class="k">this</span><span class="p">.</span><span class="nx">state</span><span class="p">.</span><span class="nx">value</span> <span class="o">!==</span> <span class="nx">nextState</span><span class="p">.</span><span class="nx">value</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>We could even generalize an implementation based on shallow equality (cause React will invoke this function pretty <strong>OFTEN</strong>, so the implementation has to be <strong>FAST</strong>) and mix it into components. In fact, React already provides such implementation: <a href="https://facebook.github.io/react/docs/pure-render-mixin.html">PureRenderMixin</a>.</p>
+
+<h2 id="issue">Issue</h2>
+
+<p>So far so good. 
+Unfortunately, there may be two issues if we bring <code class="language-plaintext highlighter-rouge">PureRenderMixin</code> into our App directly.</p>
+
+<hr />
+<blockquote>
+  <p><em>Manage object references carelessly</em></p>
+</blockquote>
+
+<p>I pushed some commits into the demo App mentioned in previous article. One of the commits is adding a functionality <code class="language-plaintext highlighter-rouge">Like</code>, you can click heart icon to like a book. See code <a href="https://github.com/just4fun/classics/commit/c010dc4cbacc021c45594720955a73664b28deec">here</a>.</p>
+
+<p><img src="https://user-images.githubusercontent.com/7512625/28053738-97f42330-6644-11e7-9ea6-40b53b349aae.jpg" alt="" /></p>
+
+<p>In addition, I added <code class="language-plaintext highlighter-rouge">debug</code> module to track which components will be re-render. See code <a href="https://github.com/just4fun/classics/commit/f2915ad12d644f8691ab6ee309b7e8ceb1c9aedf">here</a>.</p>
+
+<p>Now I search some books via entering keyword.</p>
+
+<p><img src="https://user-images.githubusercontent.com/7512625/28053741-986e5eb6-6644-11e7-9302-06df2deffee3.jpg" alt="" /></p>
+
+<p>Then I want to like the first book, so I click the heart icon.</p>
+
+<p><img src="https://user-images.githubusercontent.com/7512625/28053740-9834ca8e-6644-11e7-8f45-eec6567df6be.jpg" alt="" /></p>
+
+<p>As you see, all the book items are re-rendered. Since we want to squeeze out performance, then I bring <code class="language-plaintext highlighter-rouge">PreRenderMixin</code>. See code <a href="https://github.com/just4fun/classics/commit/6ff882cd9c4913d92d9c4b7dbfc5e447f1df598e">here</a>.</p>
+
+<p>Unfortunately, <strong>NOTHING</strong> happen, neither the like icon nor the Chrome console.</p>
+
+<p>The problem is that since the parent and inner components share a reference to the same object <code class="language-plaintext highlighter-rouge">book</code>, when the object gets mutated on onClick function, the prop the inner component had will change. So, when the re-rendering process starts, and <code class="language-plaintext highlighter-rouge">shouldComponentUpdate</code> gets invoked, <code class="language-plaintext highlighter-rouge">this.props.book</code> will be equal to <code class="language-plaintext highlighter-rouge">nextProps.value.book</code>, because in fact, they reference the same object.</p>
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">var</span> <span class="nx">BookItem</span> <span class="o">=</span> <span class="nx">React</span><span class="p">.</span><span class="nf">createClass</span><span class="p">({</span>
+  
+  <span class="na">mixins</span><span class="p">:</span> <span class="p">[</span><span class="nx">PureRenderMixin</span><span class="p">],</span>
+  
+  <span class="na">render</span><span class="p">:</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+    <span class="kd">var</span> <span class="nx">book</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">props</span><span class="p">.</span><span class="nx">book</span><span class="p">;</span>
+    <span class="c1">// ...</span>
+    <span class="kd">var</span> <span class="nx">like_status</span> <span class="o">=</span> <span class="dl">'</span><span class="s1">glyphicon glyphicon-heart</span><span class="dl">'</span><span class="p">;</span>
+    <span class="k">if </span><span class="p">(</span><span class="nx">book</span><span class="p">.</span><span class="nx">isLike</span><span class="p">)</span> <span class="p">{</span>
+      <span class="nx">like_status</span> <span class="o">+=</span> <span class="dl">'</span><span class="s1"> like</span><span class="dl">'</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="nf">debug</span><span class="p">(</span><span class="dl">'</span><span class="s1">render &lt;BookItem /&gt;</span><span class="dl">'</span><span class="p">,</span> <span class="nx">book</span><span class="p">.</span><span class="nx">title</span><span class="p">);</span>
+    <span class="k">return </span><span class="p">(</span>
+      <span class="o">&lt;</span><span class="nx">div</span> <span class="nx">className</span><span class="o">=</span><span class="dl">'</span><span class="s1">main-section__book</span><span class="dl">'</span><span class="o">&gt;</span>
+        <span class="c1">// ...</span>
+        <span class="o">&lt;</span><span class="nx">div</span> <span class="nx">className</span><span class="o">=</span><span class="dl">'</span><span class="s1">main-section__book-action</span><span class="dl">'</span><span class="o">&gt;</span>
+          <span class="o">&lt;</span><span class="nx">span</span> <span class="nx">className</span><span class="o">=</span><span class="p">{</span><span class="nx">like_status</span><span class="p">}</span> <span class="nx">onClick</span><span class="o">=</span><span class="p">{</span><span class="k">this</span><span class="p">.</span><span class="nx">_onClick</span><span class="p">.</span><span class="nf">bind</span><span class="p">(</span><span class="k">this</span><span class="p">,</span> <span class="nx">book</span><span class="p">)}</span><span class="o">&gt;&lt;</span><span class="sr">/span</span><span class="err">&gt;
+</span>        <span class="o">&lt;</span><span class="sr">/div</span><span class="err">&gt;
+</span>      <span class="o">&lt;</span><span class="sr">/div</span><span class="err">&gt;
+</span>    <span class="p">);</span>
+  <span class="p">},</span>
+  
+  <span class="na">_onClick</span><span class="p">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">book</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">BookGetActions</span><span class="p">.</span><span class="nf">like</span><span class="p">(</span><span class="nx">book</span><span class="p">);</span> <span class="c1">// the `book` share the same reference with `this.props.book`</span>
+  <span class="p">}</span>
+
+<span class="p">});</span>
+</code></pre></div></div>
+
+<p>To solve this issue, first of all, we should clone another book object to prevent the same reference sharing.</p>
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">_onClick</span><span class="p">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">book</span><span class="p">)</span> <span class="p">{</span>
+  <span class="nx">BookGetActions</span><span class="p">.</span><span class="nf">like</span><span class="p">(</span><span class="nx">JSON</span><span class="p">.</span><span class="nf">parse</span><span class="p">(</span><span class="nx">JSON</span><span class="p">.</span><span class="nf">stringify</span><span class="p">(</span><span class="nx">book</span><span class="p">)));</span> <span class="c1">// a simple way to clone</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>Then we should find the specific book in book list which is stored in <code class="language-plaintext highlighter-rouge">BookStore</code>, and replace it with the clone one. Code is omitted.</p>
+
+<p>Everything seems OK. However, it may bring another issue.</p>
+
+<hr />
+<blockquote>
+  <p><em>complex data structures</em></p>
+</blockquote>
+
+<p>As <a href="https://facebook.github.io/react/docs/pure-render-mixin.html">React doc</a> mentioned, <code class="language-plaintext highlighter-rouge">PureRenderMixin</code> only <strong>SHALLOWLY</strong> compares the objects. If these contain complex data structures, it may produce false-negatives for deeper differences, which will cause re-render even everything between two objects are same.</p>
+
+<h2 id="real-solution">Real solution</h2>
+
+<p><a href="https://github.com/facebook/immutable-js">Immutable-js</a> is a JavaScript collections library which provides immutable persistent collections. Immutability makes tracking changes cheap; a change will always result in a new object so we <strong>ONLY</strong> need to check if the reference to the object has changed.</p>
+
+<p>Immutable data structures provides you a cheap and less verbose way to track changes on objects, which is all we need to implement <code class="language-plaintext highlighter-rouge">shouldComponentUpdate</code>. Therefore, if we model props and state attributes using the abstractions provided by immutable-js we’ll be able to use <code class="language-plaintext highlighter-rouge">PureRenderMixin</code> and get a nice boost in perf. See code <a href="https://github.com/just4fun/classics/commit/ce3474f2b6d40a6a5c6e1e1b3d56681f5ca2b95f">here</a>.</p>
+
+<p>Run our App again, and like the first book, then check the Chrome console.</p>
+
+<p><img src="https://user-images.githubusercontent.com/7512625/28053739-98231c44-6644-11e7-90a5-f9422ba9ce0c.jpg" alt="" /></p>
+
+<p>As we expected, only the liked book has been re-rendered. That’s what Immutable-js do for us.</p>
+
+<h2 id="references">References</h2>
+
+<ul>
+  <li>https://facebook.github.io/react/docs/advanced-performance.html</li>
+  <li>https://facebook.github.io/react/docs/pure-render-mixin.html</li>
+  <li>http://calendar.perfplanet.com/2013/diff/</li>
+</ul>]]></content><author><name></name></author><category term="immutable" /><category term="flux" /><summary type="html"><![CDATA[In previous article, we got a general understanding about Flux architecture. And in Best Practise section, I have mentioned Immutable data which I haven't take a look yet. Now it's time to dig into it.]]></summary></entry><entry><title type="html">Flux architecture</title><link href="https://just4fun.github.io/2015/05/12/flux-architecture/" rel="alternate" type="text/html" title="Flux architecture" /><published>2015-05-12T00:00:00+00:00</published><updated>2015-05-12T00:00:00+00:00</updated><id>https://just4fun.github.io/2015/05/12/flux-architecture</id><content type="html" xml:base="https://just4fun.github.io/2015/05/12/flux-architecture/"><![CDATA[<p>At the end of last year, there are two interesting stuff produced by Facebook came into fashion. One is <a href="http://facebook.github.io/react/">React</a>, another is <a href="http://facebook.github.io/flux/">Flux</a>.</p>
+
+<!-- more -->
+
+<p>Let’s have a detailed overview about Flux.</p>
+
+<h2 id="overview">Overview</h2>
+
+<p>An application architecture that complements React’s compassable view components by utilising <strong>unidirectional</strong> data flow.</p>
+
+<p><img src="https://user-images.githubusercontent.com/7512625/28053535-85aff402-6643-11e7-877b-fce8e922ccc9.png" alt="unidirectional work flow" /></p>
+
+<h2 id="main-components">Main Components</h2>
+
+<ul>
+  <li>Dispatcher
+    <ul>
+      <li><strong>central hub</strong>, manages all data flow in application</li>
+      <li>distribute the <strong>Actions</strong> to the <strong>Stores</strong></li>
+    </ul>
+  </li>
+  <li>Action
+    <ul>
+      <li>send an object (aka <strong>payload</strong>) contains <strong>type</strong> and <strong>data</strong> to dispatcher</li>
+      <li>do not contain knowledge about how to update the stores</li>
+      <li>invoke from event handlers of <strong>views</strong> or <strong>server</strong></li>
+    </ul>
+  </li>
+  <li>Store
+    <ul>
+      <li>contain application <strong>state</strong> and <strong>logic</strong></li>
+      <li>register itself with the dispatcher and provide it with a callback</li>
+      <li>broadcast an event to notify the views to update</li>
+    </ul>
+  </li>
+  <li>View (Controller-View)
+    <ul>
+      <li>get data from the stores</li>
+      <li>render and pass data down to its descendants</li>
+    </ul>
+  </li>
+</ul>
+
+<p><img src="https://user-images.githubusercontent.com/7512625/28053570-b5d242ca-6643-11e7-9010-43825cf305c4.png" alt="Flux main components" /></p>
+
+<h2 id="compare-with-mvc">Compare with MVC</h2>
+
+<p>In my opinion, I’m not in favor of camparing Flux with MVC.</p>
+
+<p>Flux is an architecture which help React to build client-side application. With Flux, React can be used more easily.</p>
+
+<ul>
+  <li>store application <strong>state</strong> in Store, like Ember-data</li>
+  <li>easy to <strong>communicate</strong> between React components</li>
+  <li>unidirectional data flow is more <strong>predictable</strong></li>
+</ul>
+
+<p>However, if you want to use Flux <strong>independently</strong> without React, that maybe a little difficult. The unidirectional data flow is dependant on the core concept of React: <strong>Virtual DOM</strong>. Once user triggers an event from view, the flow cycle starts. When it reachs Store, it will emit an event to notify View to re-render, which is based on Virtual DOM. Therefore, you should implement a set of things which React already prepare for you.</p>
+
+<p>As for MVC, it’s also an architectural pattern, but it’s more common. One of the disadvantages about Flux is that it’s a little hard to migrate current architecture to Flux. Imagine that you have an application with one MV* framework, such as Angular or Ember. If you want to use Flux, maybe you should rebuild your whole application. It’s no need to do the migration indeed.</p>
+
+<p><img src="https://user-images.githubusercontent.com/7512625/28053627-0cc0aa9a-6644-11e7-9fd1-4e2fe5ecfc66.png" alt="MVC work flow" /></p>
+
+<p>What is more, I think we should compare Flux with <strong>MVVM</strong>, not MVC, because some frameworks like Backbone just implement MVC but has no data-binding, and the data-binding is the biggest difference from unidirectional data flow. So in my opinoin, it’s boring to compare pure MVC with Flux.</p>
+
+<p><img src="https://user-images.githubusercontent.com/7512625/28053588-d64cd29a-6643-11e7-9cd1-242ff919f708.png" alt="MVVM work flow" /></p>
+
+<h2 id="best-practise">Best Practise</h2>
+
+<ul>
+  <li>ajax calls should come from Action</li>
+  <li>distinguish between view triggered actions and server/API triggered actions</li>
+  <li>distinguish between <strong>stateful</strong> Controller-Views and <strong>stateless</strong> Views</li>
+  <li><strong>Immutable</strong> data (See my another <a href="http://just4fun.github.io/hexo-blog/2015/07/18/use-immutable-js-in-react-application/">post</a>)</li>
+</ul>
+
+<h2 id="demo">Demo</h2>
+
+<p>I have wrote a simple demo which used React and Flux.
+Just for fun.</p>
+
+<ul>
+  <li>Repo: https://github.com/just4fun/classics/tree/master/repos/react_flux</li>
+  <li>Live Demo: http://just4fun.github.io/classics</li>
+</ul>
+
+<h2 id="references">References</h2>
+
+<ul>
+  <li>https://facebook.github.io/flux/docs/overview.html</li>
+  <li>http://fluxxor.com/what-is-flux.html</li>
+  <li>https://scotch.io/tutorials/getting-to-know-flux-the-react-js-architecture</li>
+  <li>http://racingtadpole.com/blog/flux-react-best-practices/</li>
+</ul>]]></content><author><name></name></author><category term="facebook" /><category term="flux" /><category term="js" /><summary type="html"><![CDATA[At the end of last year, there are two interesting stuff produced by Facebook came into fashion. One is React, another is Flux.]]></summary></entry><entry><title type="html">What the hell is F2E</title><link href="https://just4fun.github.io/2015/04/29/what-the-hell-is-f2e/" rel="alternate" type="text/html" title="What the hell is F2E" /><published>2015-04-29T00:00:00+00:00</published><updated>2015-04-29T00:00:00+00:00</updated><id>https://just4fun.github.io/2015/04/29/what-the-hell-is-f2e</id><content type="html" xml:base="https://just4fun.github.io/2015/04/29/what-the-hell-is-f2e/"><![CDATA[<p>As a F2E (Front End Engineer), there is a big headache that how should I explain to others what is F2E or what F2E do.</p>
+
+<!-- more -->
+
+<hr />
+
+<p>In general, many people consider F2E the similar role like UI/UX, they also think F2E should belong to the Design Department, not the Develop Department. In their opinions, the biggest task for F2E is transform <code class="language-plaintext highlighter-rouge">.psd</code> file which produced by UI/UX to <code class="language-plaintext highlighter-rouge">.html</code> file, and our weapons are only html and css. A little javascript at most.</p>
+
+<p>For instance, below is conversation between I and some guys in other departments when I decided to resign from my previous company.</p>
+
+<p><em>– Where will you go?
+– Somewhere I can do the interesting things about front end.
+– So you’re the F2E here!
+– But what I did is just a small part of front end.
+– So…what F2E should do?
+– Ummm…</em></p>
+
+<p>At that time, I always don’t know how to explain. Of course I won’t tell them such as MVC/MVVM or modularization.</p>
+
+<hr />
+
+<p>Even for some F2Es, they also think the main task is build web pages with html5 and css3. As for javascript, it is just used for form validation, ajax, or building sliders.</p>
+
+<p>Today, there are still many companys only use jQuery in their projects. They use JSP or ASP.NET to render page, then use jQuery to do some UI changes. All the javascript code are in the global namespace, even in tempaltes. In addition, if they want to upgrade jQuery, they should download it from jQuery official site, and then put it into repo.</p>
+
+<hr />
+
+<p>So, what the hell is F2E?</p>
+
+<p>When decide to build a web application(context of use aside), from F2E’s perspective, we could do as below.</p>
+
+<ul>
+  <li>use RequireJS/Browserify/Webpack for modularization.</li>
+  <li>use npm/bower for version control of libraries.</li>
+  <li>use Grunt/Gulp for building automating tasks.</li>
+  <li>select appropriate framework/libraries</li>
+  <li>abstract reusable components</li>
+  <li>write integration/unit tests</li>
+  <li>optimize performance</li>
+  <li>ensure compatibility</li>
+  <li>etc.</li>
+</ul>
+
+<p>We can move most logics from backend to front end based on these advanced tools and modern browsers, and backend can only focus on APIs.</p>
+
+<hr />
+
+<p>Nowadays, you can write any application with javascript, not only web application. You can write backend with Node, build desktop application with node-webkit, even build native app with react-native.</p>
+
+<p>Are you ready to write javascript?</p>]]></content><author><name></name></author><category term="f2e" /><summary type="html"><![CDATA[As a F2E (Front End Engineer), there is a big headache that how should I explain to others what is F2E or what F2E do.]]></summary></entry><entry><title type="html">Some basic Git commands</title><link href="https://just4fun.github.io/2015/02/13/some-basic-git-commands/" rel="alternate" type="text/html" title="Some basic Git commands" /><published>2015-02-13T00:00:00+00:00</published><updated>2015-02-13T00:00:00+00:00</updated><id>https://just4fun.github.io/2015/02/13/some-basic-git-commands</id><content type="html" xml:base="https://just4fun.github.io/2015/02/13/some-basic-git-commands/"><![CDATA[<p>Record some basic Git commands here for later reference.</p>
+
+<!-- more -->
+
+<h3 id="stashing">Stashing</h3>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>git stash                         <span class="c"># stash half-done code into stack except untracked files</span>
+<span class="nv">$ </span>git stash <span class="nt">-u</span>                      <span class="c"># stash any changed files</span>
+<span class="nv">$ </span>git stash <span class="nt">-p</span>                      <span class="c"># prompt which of changes you would like to stash</span>
+<span class="nv">$ </span>git stash branch new_branch_name  <span class="c"># create new branch with stash and drop it from stack</span>
+
+<span class="nv">$ </span>git stash list                    <span class="c"># list stored stashes</span>
+
+<span class="nv">$ </span>git stash apply                   <span class="c"># apply stored stash but the file you staged before wasn’t restaged</span>
+<span class="nv">$ </span>git stash apply <span class="nt">--index</span>           <span class="c"># apply stored stash and reapply the staged changes</span>
+<span class="nv">$ </span>git stash pop                     <span class="c"># apply stored stash and drop it from stack immediately</span>
+
+<span class="nv">$ </span>git stash drop                    <span class="c"># drop stash from stack</span>
+<span class="nv">$ </span>git stash clear                   <span class="c"># clear all stashes from stack</span>
+
+<span class="nv">$ </span>git revert HEAD                   <span class="c"># record a new commit to revert last commit</span>
+<span class="nv">$ </span>git revert &lt;commit&gt;               <span class="c"># record a new commit to revert specific commit</span>
+<span class="nv">$ </span>git cherry-pick &lt;commit&gt;          <span class="c"># reverse to `git revert`, record a new commit to apply specific commit change</span>
+
+<span class="nv">$ </span>git reset <span class="nt">--soft</span> &lt;commit&gt;         <span class="c"># reset to specific commit and keep the changes in index</span>
+<span class="nv">$ </span>git reset <span class="nt">--hard</span> &lt;commit&gt;         <span class="c"># reset to specific commit and discard the changes</span>
+</code></pre></div></div>]]></content><author><name></name></author><category term="git" /><summary type="html"><![CDATA[Record some basic Git commands here for later reference.]]></summary></entry><entry><title type="html">How router of Single Page Application works</title><link href="https://just4fun.github.io/2015/02/08/how-router-of-single-page-application-works/" rel="alternate" type="text/html" title="How router of Single Page Application works" /><published>2015-02-08T00:00:00+00:00</published><updated>2015-02-08T00:00:00+00:00</updated><id>https://just4fun.github.io/2015/02/08/how-router-of-single-page-application-works</id><content type="html" xml:base="https://just4fun.github.io/2015/02/08/how-router-of-single-page-application-works/"><![CDATA[<p>In some javascript frameworks (<a href="http://backbonejs.org/">Backbone</a>, <a href="http://emberjs.com/">Ember</a>, <a href="https://angularjs.org/">Angular</a>, etc.), there is <code class="language-plaintext highlighter-rouge">Router</code>, which provide us ability to manage states in our applications.</p>
+
+<!-- more -->
+
+<p>Generally, there are two ways to manage url. One is <strong>hash</strong>, which relies upon the <code class="language-plaintext highlighter-rouge">hashchange</code> event existing in the browser. The other is <strong>history</strong>, which relies upon the browser’s <code class="language-plaintext highlighter-rouge">history</code> API.</p>
+
+<hr />
+
+<p>To bootstrap router, we should have some config first.</p>
+
+<p>In Backbone,</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">// use hash fragment</span>
+<span class="nx">Backbone</span><span class="p">.</span><span class="nx">history</span><span class="p">.</span><span class="nf">start</span><span class="p">();</span>
+<span class="c1">// use History API</span>
+<span class="nx">Backbone</span><span class="p">.</span><span class="nx">history</span><span class="p">.</span><span class="nf">start</span><span class="p">({</span><span class="na">pushState</span><span class="p">:</span> <span class="kc">true</span><span class="p">})</span>
+</code></pre></div></div>
+
+<p>In Ember,</p>
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">// use hash fragment</span>
+<span class="nx">App</span><span class="p">.</span><span class="nx">Router</span><span class="p">.</span><span class="nf">reopen</span><span class="p">({</span><span class="na">location</span><span class="p">:</span> <span class="dl">'</span><span class="s1">hash</span><span class="dl">'</span><span class="p">});</span>
+<span class="c1">// use History API</span>
+<span class="nx">App</span><span class="p">.</span><span class="nx">Router</span><span class="p">.</span><span class="nf">reopen</span><span class="p">({</span><span class="na">location</span><span class="p">:</span> <span class="dl">'</span><span class="s1">history</span><span class="dl">'</span><span class="p">});</span>
+<span class="c1">// automatic detection</span>
+<span class="nx">App</span><span class="p">.</span><span class="nx">Router</span><span class="p">.</span><span class="nf">reopen</span><span class="p">({</span><span class="na">location</span><span class="p">:</span> <span class="dl">'</span><span class="s1">auto</span><span class="dl">'</span><span class="p">});</span>
+</code></pre></div></div>
+
+<p>In Angular,</p>
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">// use hash fragment</span>
+<span class="nx">$locationProvider</span><span class="p">.</span><span class="nf">html5Mode</span><span class="p">(</span><span class="kc">false</span><span class="p">);</span>
+<span class="c1">// use History API</span>
+<span class="nx">$locationProvider</span><span class="p">.</span><span class="nf">html5Mode</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span>
+</code></pre></div></div>
+
+<hr />
+
+<p>As we know, when we use <code class="language-plaintext highlighter-rouge">hash</code>, the url behind <code class="language-plaintext highlighter-rouge">#</code> will not be sent to server. So we can simply add <code class="language-plaintext highlighter-rouge">hashchange</code> event to listen url change (in essence, it’s hash change).</p>
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nb">window</span><span class="p">.</span><span class="nx">onhashchange</span> <span class="o">=</span> <span class="nf">function </span><span class="p">()</span> <span class="p">{</span>
+  <span class="k">if </span><span class="p">(</span><span class="nx">location</span><span class="p">.</span><span class="nx">hash</span> <span class="o">==</span> <span class="dl">'</span><span class="s1">#about</span><span class="dl">'</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// do stuff here</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>These frameworks have already wraped this default configuration for us, we just follow their own router way to config.</p>
+
+<hr />
+
+<p>But for <code class="language-plaintext highlighter-rouge">history</code>, how it works? It relies upon <code class="language-plaintext highlighter-rouge">pushState</code> and <code class="language-plaintext highlighter-rouge">replaceState</code>.</p>
+
+<p>When we click <code class="language-plaintext highlighter-rouge">&lt;a&gt;</code> tag to another link, we should do some works,</p>
+<ul>
+  <li>prevent default behaviour</li>
+  <li>get the url which we want to link to</li>
+  <li>use pushState or replaceState to change the url without any refresh</li>
+</ul>
+
+<p>For Ember and Angular, this is built-in support. So we should implement this by ourself in Backbone application.</p>
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nf">$</span><span class="p">(</span><span class="nb">document</span><span class="p">).</span><span class="nf">on</span><span class="p">(</span><span class="dl">"</span><span class="s2">a</span><span class="dl">"</span><span class="p">,</span> <span class="dl">"</span><span class="s2">click</span><span class="dl">"</span><span class="p">,</span> <span class="kd">function</span><span class="p">(</span><span class="nx">e</span><span class="p">)</span> <span class="p">{</span>
+  <span class="kd">var</span> <span class="nx">href</span> <span class="o">=</span> <span class="nf">$</span><span class="p">(</span><span class="k">this</span><span class="p">).</span><span class="nf">attr</span><span class="p">(</span><span class="dl">"</span><span class="s2">href</span><span class="dl">"</span><span class="p">);</span>
+  <span class="kd">var</span> <span class="nx">protocol</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">protocol</span> <span class="o">+</span> <span class="dl">"</span><span class="s2">//</span><span class="dl">"</span><span class="p">;</span>
+ 
+  <span class="k">if </span><span class="p">(</span><span class="nx">href</span><span class="p">.</span><span class="nf">slice</span><span class="p">(</span><span class="nx">protocol</span><span class="p">.</span><span class="nx">length</span><span class="p">)</span> <span class="o">!==</span> <span class="nx">protocol</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">e</span><span class="p">.</span><span class="nf">preventDefault</span><span class="p">();</span>
+    <span class="nx">Backbone</span><span class="p">.</span><span class="nx">history</span><span class="p">.</span><span class="nf">navigate</span><span class="p">(</span><span class="nx">href</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">});</span>
+</code></pre></div></div>
+
+<hr />
+
+<p>One thing to <strong>NOTE</strong> is that, if we use <code class="language-plaintext highlighter-rouge">history</code> API, it’s must be supported in our server side. Otherwise, we will get 404 page when we refresh.</p>]]></content><author><name></name></author><category term="spa" /><category term="router" /><category term="pushstate" /><category term="js" /><summary type="html"><![CDATA[In some javascript frameworks (Backbone, Ember, Angular, etc.), there is Router, which provide us ability to manage states in our applications.]]></summary></entry></feed>
