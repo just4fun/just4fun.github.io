@@ -21,6 +21,6 @@ During the time away from work, I like running 🏃, kick-boxing 🥊, and learn
 - I'm still been training in a fight club twice every week.
 - I have got JLPT (Japanese-Language Proficiency Test) N2 certificate many years ago.
 
-If you like my [projects](/projects) and wanna hire me, please ask me for cv via [email](mailto:houritsunohikari@gmail.com).
+If you like my [projects](/projects) and wanna hire me, please ask me for cv via [email](mailto:zorojiang.jp@gmail.com).
 
 If you are interested in me, please find my SNSs in [home](/).
